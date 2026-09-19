@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Orders API
+  version: 1.0.0
+paths:
+  /orders:
+    get:
+      operationId: listOrders
+      summary: List orders
+      description: |
+        Returns orders newest first.
+        Omitting status returns all orders visible to the caller.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Optional order status filter.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Orders were returned successfully.
+

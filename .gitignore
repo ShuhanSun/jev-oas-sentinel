@@ -1,0 +1,9 @@
+target/
+.idea/
+*.iml
+.DS_Store
+.env
+jev-api.key
+*.sarif
+reports/
+

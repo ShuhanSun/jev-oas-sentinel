@@ -1,0 +1,67 @@
+name: JEV OAS Sentinel
+description: Detect structural and semantic OpenAPI compatibility risks
+author: jev-oas-sentinel contributors
+
+inputs:
+  base:
+    description: Baseline OpenAPI document
+    required: true
+  head:
+    description: Candidate OpenAPI document
+    required: true
+  api-key:
+    description: TypeSafe API key; omit only when no-jev is true
+    required: false
+  no-jev:
+    description: Disable semantic evaluation and run deterministic checks only
+    required: false
+    default: "false"
+  mode:
+    description: advisory or enforce
+    required: false
+    default: advisory
+  format:
+    description: json, markdown, or sarif
+    required: false
+    default: sarif
+  output:
+    description: Report output path
+    required: false
+    default: jev-oas-sentinel.sarif
+  fail-on-review:
+    description: Fail the action when review findings exist
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Build JEV OAS Sentinel
+      shell: bash
+      run: "$GITHUB_ACTION_PATH/mvnw -q -f \"$GITHUB_ACTION_PATH/pom.xml\" -DskipTests package"
+
+    - name: Compare OpenAPI contracts
+      shell: bash
+      env:
+        TYPESAFE_API_KEY: ${{ inputs.api-key }}
+        SENTINEL_BASE: ${{ inputs.base }}
+        SENTINEL_HEAD: ${{ inputs.head }}
+        SENTINEL_NO_JEV: ${{ inputs.no-jev }}
+        SENTINEL_MODE: ${{ inputs.mode }}
+        SENTINEL_FORMAT: ${{ inputs.format }}
+        SENTINEL_OUTPUT: ${{ inputs.output }}
+        SENTINEL_FAIL_ON_REVIEW: ${{ inputs.fail-on-review }}
+      run: |
+        args=(compare --base "$SENTINEL_BASE" --head "$SENTINEL_HEAD" --mode "$SENTINEL_MODE" --format "$SENTINEL_FORMAT" --output "$SENTINEL_OUTPUT")
+        if [[ "$SENTINEL_NO_JEV" == "true" ]]; then
+          args+=(--no-jev)
+        fi
+        if [[ "$SENTINEL_FAIL_ON_REVIEW" == "true" ]]; then
+          args+=(--fail-on-review)
+        fi
+        java -jar "$GITHUB_ACTION_PATH/target/jev-oas-sentinel-0.1.0-SNAPSHOT.jar" "${args[@]}"
+
+branding:
+  icon: shield
+  color: purple
+
