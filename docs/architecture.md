@@ -36,8 +36,7 @@ The internal YAML reader supports mappings, sequences, quoted and plain scalars,
 
 ## Extension points
 
-- `DecisionClient`: alternate TypeSafe transports or recorded responses.
-- `ReportRenderer`: additional CI formats.
+- `DecisionClient` protocol: alternate TypeSafe transports or recorded responses.
+- `report.render`: additional CI formats.
 - `OpenApiDiffer`: deeper schema compatibility checks or an `oasdiff` JSON adapter.
 - `PolicyEngine`: organization-specific risk policies and calibrated thresholds.
-

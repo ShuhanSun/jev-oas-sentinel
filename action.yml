@@ -36,9 +36,10 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Build JEV OAS Sentinel
-      shell: bash
-      run: "$GITHUB_ACTION_PATH/mvnw -q -f \"$GITHUB_ACTION_PATH/pom.xml\" -DskipTests package"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
 
     - name: Compare OpenAPI contracts
       shell: bash
@@ -59,9 +60,8 @@ runs:
         if [[ "$SENTINEL_FAIL_ON_REVIEW" == "true" ]]; then
           args+=(--fail-on-review)
         fi
-        java -jar "$GITHUB_ACTION_PATH/target/jev-oas-sentinel-0.1.0-SNAPSHOT.jar" "${args[@]}"
+        PYTHONPATH="$GITHUB_ACTION_PATH/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m jev_oas_sentinel "${args[@]}"
 
 branding:
   icon: shield
   color: purple
-

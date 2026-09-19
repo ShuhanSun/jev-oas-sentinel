@@ -7,33 +7,36 @@ Catch consumer-visible API changes hiding in “documentation-only” OpenAPI ed
 1. deterministic checks find definite structural compatibility problems;
 2. TypeSafe Jev evaluates bounded semantic questions about changed descriptions, examples, defaults, retry behavior, ordering, pagination, authorization, and error semantics.
 
-Jev never writes a review or changes a specification. It returns typed decisions and probabilities; ordinary Java code decides whether to pass, request review, or block.
+JEV never writes a review or changes a specification. It returns typed decisions and probabilities; deterministic Python code decides whether to pass, request review, or block.
 
 ## Status
 
 This is an MVP. It supports OpenAPI JSON and the common YAML subset used by the included fixtures. YAML anchors, custom tags, and merge keys are rejected rather than interpreted incorrectly. Advisory mode is the default.
 
+Local `$ref` and remote `$ref` targets are not dereferenced in this release. A changed reference is routed to structural review rather than silently treated as compatible.
+
 ## Requirements
 
-- Java 17
-- Maven 3.9+
+- Python 3.9+
 - A TypeSafe API key for live semantic evaluation
 
-Production code has no third-party runtime dependencies. JUnit 5 and Mockito are test-only dependencies.
+The CLI has no third-party runtime dependencies. It runs directly from a checkout or can be installed with `pipx`/`pip`.
 
-## Build and test
+## Install and test
 
 ```bash
-./mvnw test
-./mvnw package
+python3 -m pip install .
+python3 -m unittest discover -s tests -v
 ```
+
+For development without installing, prefix commands with `PYTHONPATH=src python3 -m jev_oas_sentinel`.
 
 ## Quick start
 
 Run deterministic checks only:
 
 ```bash
-java -jar target/jev-oas-sentinel-0.1.0-SNAPSHOT.jar compare \
+jev-oas-sentinel compare \
   --base examples/base-openapi.yaml \
   --head examples/head-openapi.yaml \
   --no-jev \
@@ -45,7 +48,7 @@ Run a live Jev evaluation:
 ```bash
 export TYPESAFE_API_KEY="..."
 
-java -jar target/jev-oas-sentinel-0.1.0-SNAPSHOT.jar compare \
+jev-oas-sentinel compare \
   --base examples/base-openapi.yaml \
   --head examples/head-openapi.yaml \
   --format markdown
@@ -56,7 +59,7 @@ The client also accepts `--api-key-file PATH`. Never commit that file.
 Write SARIF for GitHub code scanning:
 
 ```bash
-java -jar target/jev-oas-sentinel-0.1.0-SNAPSHOT.jar compare \
+jev-oas-sentinel compare \
   --base openapi-base.yaml \
   --head src/main/resources/openapi.yaml \
   --format sarif \

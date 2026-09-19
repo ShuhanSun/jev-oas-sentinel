@@ -1,4 +1,9 @@
-target/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.venv/
 .idea/
 *.iml
 .DS_Store
@@ -6,4 +11,3 @@ target/
 jev-api.key
 *.sarif
 reports/
-
