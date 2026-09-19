@@ -17,19 +17,40 @@ Local `$ref` and remote `$ref` targets are not dereferenced in this release. A c
 
 ## Requirements
 
-- Python 3.9+
+- [`uv`](https://docs.astral.sh/uv/) for the recommended installation and development workflow
+- Python 3.9+ when running without `uv`
 - A TypeSafe API key for live semantic evaluation
 
-The CLI has no third-party runtime dependencies. It runs directly from a checkout or can be installed with `pipx`/`pip`.
+The CLI has no third-party runtime dependencies. Tool installers keep it isolated from system and project Python environments.
 
-## Install and test
+## Install
+
+Install the current checkout as a managed, editable command:
 
 ```bash
-python3 -m pip install .
-python3 -m unittest discover -s tests -v
+uv tool install --editable .
+jev-oas-sentinel --version
 ```
 
-For development without installing, prefix commands with `PYTHONPATH=src python3 -m jev_oas_sentinel`.
+On a Mac or corporate network that relies on certificates from the operating-system trust store, add `--system-certs` to the install command.
+
+After the package is published to PyPI, users can run it once without installing it:
+
+```bash
+uvx jev-oas-sentinel --version
+```
+
+Or install it persistently with either supported tool:
+
+```bash
+uv tool install jev-oas-sentinel
+# or
+pipx install jev-oas-sentinel
+```
+
+Managed installs can be upgraded or removed cleanly with `uv tool upgrade jev-oas-sentinel` and `uv tool uninstall jev-oas-sentinel`.
+
+`./jev-oas-sentinel` remains available as a no-install fallback when working directly in a source checkout.
 
 ## Quick start
 
@@ -71,7 +92,7 @@ jev-oas-sentinel compare \
 The repository includes a composite action. A complete pull-request example is available at [`examples/github-workflow.yaml`](examples/github-workflow.yaml).
 
 ```yaml
-- uses: your-org/jev-oas-sentinel@v0
+- uses: ShuhanSun/jev-oas-sentinel@v0.2.0
   with:
     base: /tmp/openapi-base.yaml
     head: src/main/resources/openapi.yaml
@@ -131,3 +152,14 @@ The report retains the selected values, full probability distributions, confiden
 - OpenAPI descriptions are untrusted input. The tool does not execute examples, extensions, URLs, or code found in a specification.
 
 See [docs/architecture.md](docs/architecture.md) for design boundaries and extension points.
+
+## Development
+
+```bash
+uv sync --locked
+uv run python -m unittest discover -s tests -v
+uv run jev-oas-sentinel --version
+uv build --no-sources
+```
+
+CI runs the tests on Python 3.9, 3.11, and 3.13 and validates both distribution artifacts. See [docs/releasing.md](docs/releasing.md) for the trusted-publishing release process.

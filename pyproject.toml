@@ -1,6 +1,52 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "jev-oas-sentinel"
+dynamic = ["version"]
+description = "Semantic OpenAPI compatibility checks powered by TypeSafe JEV"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+authors = [{ name = "jev-oas-sentinel contributors" }]
+keywords = ["openapi", "compatibility", "github-actions", "jev", "api"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.scripts]
+jev-oas-sentinel = "jev_oas_sentinel.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ShuhanSun/jev-oas-sentinel"
+Documentation = "https://github.com/ShuhanSun/jev-oas-sentinel#readme"
+Issues = "https://github.com/ShuhanSun/jev-oas-sentinel/issues"
+Source = "https://github.com/ShuhanSun/jev-oas-sentinel"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+jev_oas_sentinel = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = { attr = "jev_oas_sentinel.__version__" }
+
+[tool.uv]
+required-version = ">=0.11.23,<0.12"
 
 [tool.coverage.run]
 source = ["jev_oas_sentinel"]
