@@ -9,6 +9,9 @@ inputs:
   head:
     description: Candidate OpenAPI document
     required: true
+  ref-root:
+    description: Allowed root directory for local $ref files
+    required: false
   api-key:
     description: TypeSafe API key; omit only when no-jev is true
     required: false
@@ -52,6 +55,7 @@ runs:
         TYPESAFE_API_KEY: ${{ inputs.api-key }}
         SENTINEL_BASE: ${{ inputs.base }}
         SENTINEL_HEAD: ${{ inputs.head }}
+        SENTINEL_REF_ROOT: ${{ inputs.ref-root }}
         SENTINEL_NO_JEV: ${{ inputs.no-jev }}
         SENTINEL_MODE: ${{ inputs.mode }}
         SENTINEL_FORMAT: ${{ inputs.format }}
@@ -59,6 +63,9 @@ runs:
         SENTINEL_FAIL_ON_REVIEW: ${{ inputs.fail-on-review }}
       run: |
         args=(compare --base "$SENTINEL_BASE" --head "$SENTINEL_HEAD" --mode "$SENTINEL_MODE" --format "$SENTINEL_FORMAT" --output "$SENTINEL_OUTPUT")
+        if [[ -n "$SENTINEL_REF_ROOT" ]]; then
+          args+=(--ref-root "$SENTINEL_REF_ROOT")
+        fi
         if [[ "$SENTINEL_NO_JEV" == "true" ]]; then
           args+=(--no-jev)
         fi

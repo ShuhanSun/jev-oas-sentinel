@@ -4,7 +4,7 @@
 base/head OpenAPI
         |
         v
-dependency-free JSON/YAML loader
+safe JSON/YAML loader + local $ref resolver
         |
         v
 deterministic operation diff ------> definite structural findings
@@ -30,9 +30,14 @@ The loader and differ answer questions that code can answer exactly. Jev receive
 
 The implementation intentionally avoids asking Jev for explanations. Report messages are fixed templates backed by operation paths and typed results, so generated prose cannot become an enforcement input.
 
-## YAML support
+## OpenAPI loading
 
-The internal YAML reader supports mappings, sequences, quoted and plain scalars, inline JSON-style collections, and literal/folded block strings. It rejects tabs, anchors, aliases, merge keys, and custom tags. A later adapter can integrate a fully compliant parser after dependency approval without changing the diff or policy interfaces.
+PyYAML's safe loader handles JSON and standards-compliant YAML without
+constructing arbitrary Python objects. Anchors and merge keys are supported.
+Internal and relative-file `$ref` values are resolved before comparison, with
+cycle boundaries preserved as references. Network references are rejected and
+are never fetched implicitly. Relative references cannot escape the source
+document's directory unless the caller supplies a broader trusted `--ref-root`.
 
 ## Extension points
 

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import json
 from pathlib import Path
 from typing import Any
 
-from .yaml_lite import parse as parse_yaml
+from .loader import load_openapi
 
 
 HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace", "query"}
@@ -31,17 +30,8 @@ class OperationChange:
     removed: bool = False
 
 
-def load_spec(path: Path) -> dict[str, Any]:
-    text = path.read_text(encoding="utf-8")
-    try:
-        parsed = json.loads(text) if text.lstrip().startswith(("{", "[")) else parse_yaml(text)
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise ValueError(f"Cannot parse {path}: {exc}") from exc
-    if not isinstance(parsed, dict):
-        raise ValueError(f"OpenAPI document must be a top-level object: {path}")
-    if not isinstance(parsed.get("openapi"), str) or not isinstance(parsed.get("paths"), dict):
-        raise ValueError(f"Missing required OpenAPI fields 'openapi' or 'paths': {path}")
-    return parsed
+def load_spec(path: Path, ref_root: Path | None = None) -> dict[str, Any]:
+    return load_openapi(path, ref_root)
 
 
 class OpenApiDiffer:
@@ -135,13 +125,19 @@ class OpenApiDiffer:
     def _compare_request_body(
         self, operation: str, old: dict[str, Any], new: dict[str, Any], issues: list[StructuralIssue]
     ) -> None:
+        initial_issue_count = len(issues)
         old_body = self._mapping(old.get("requestBody"))
         new_body = self._mapping(new.get("requestBody"))
         if not old_body.get("required") and new_body.get("required") is True:
             issues.append(StructuralIssue(
                 "request-body-became-required", "block", operation, "Request body became required"
             ))
-        if (old_body or new_body) and self._remove_documentation(old_body) != self._remove_documentation(new_body):
+        self._compare_content(operation, old_body, new_body, issues, "request")
+        if (
+            (old_body or new_body)
+            and self._remove_documentation(old_body) != self._remove_documentation(new_body)
+            and len(issues) == initial_issue_count
+        ):
             issues.append(StructuralIssue(
                 "request-body-structure-changed", "review", operation,
                 "Request body schema or constraints changed",
@@ -150,18 +146,178 @@ class OpenApiDiffer:
     def _compare_responses(
         self, operation: str, old: dict[str, Any], new: dict[str, Any], issues: list[StructuralIssue]
     ) -> None:
+        initial_issue_count = len(issues)
         old_responses = self._mapping(old.get("responses"))
         new_responses = self._mapping(new.get("responses"))
-        for status in old_responses:
-            if status not in new_responses:
+        for status, old_response in old_responses.items():
+            new_response = new_responses.get(status)
+            if new_response is None:
                 issues.append(StructuralIssue(
                     "response-removed", "block", operation, f"Response status removed: {status}"
                 ))
-        if self._remove_documentation(old_responses) != self._remove_documentation(new_responses):
+                continue
+            self._compare_content(
+                operation,
+                self._mapping(old_response),
+                self._mapping(new_response),
+                issues,
+                "response",
+                f"response {status}",
+            )
+        if (
+            self._remove_documentation(old_responses) != self._remove_documentation(new_responses)
+            and len(issues) == initial_issue_count
+        ):
             issues.append(StructuralIssue(
                 "response-structure-changed", "review", operation,
                 "Response schemas or constraints changed",
             ))
+
+    def _compare_content(
+        self,
+        operation: str,
+        old_container: dict[str, Any],
+        new_container: dict[str, Any],
+        issues: list[StructuralIssue],
+        direction: str,
+        location: str = "request body",
+    ) -> None:
+        old_content = self._mapping(old_container.get("content"))
+        new_content = self._mapping(new_container.get("content"))
+        for media_type, old_media in old_content.items():
+            new_media = new_content.get(media_type)
+            if new_media is None:
+                issues.append(StructuralIssue(
+                    f"{direction}-media-type-removed", "block", operation,
+                    f"{location.capitalize()} media type removed: {media_type}",
+                ))
+                continue
+            self._compare_schema(
+                operation,
+                self._mapping(self._mapping(old_media).get("schema")),
+                self._mapping(self._mapping(new_media).get("schema")),
+                issues,
+                direction,
+                f"{location} {media_type}",
+                set(),
+            )
+
+    def _compare_schema(
+        self,
+        operation: str,
+        old: dict[str, Any],
+        new: dict[str, Any],
+        issues: list[StructuralIssue],
+        direction: str,
+        location: str,
+        visited: set[tuple[int, int]],
+    ) -> None:
+        if not old or not new:
+            return
+        identity = (id(old), id(new))
+        if identity in visited:
+            return
+        visited.add(identity)
+
+        old_types = self._schema_types(old.get("type"))
+        new_types = self._schema_types(new.get("type"))
+        incompatible_types = (
+            direction == "request" and not old_types.issubset(new_types)
+        ) or (
+            direction == "response" and not new_types.issubset(old_types)
+        )
+        if old_types and new_types and incompatible_types:
+            issues.append(StructuralIssue(
+                f"{direction}-schema-type-incompatible", "block", operation,
+                f"{location.capitalize()} type changed incompatibly from "
+                f"{sorted(old_types)} to {sorted(new_types)}",
+            ))
+            return
+
+        old_properties = self._mapping(old.get("properties"))
+        new_properties = self._mapping(new.get("properties"))
+        for name in old_properties:
+            if name not in new_properties:
+                issues.append(StructuralIssue(
+                    f"{direction}-property-removed", "block", operation,
+                    f"{location.capitalize()} property removed: {name}",
+                ))
+
+        old_required = self._required_names(old.get("required"), location)
+        new_required = self._required_names(new.get("required"), location)
+        if direction == "request":
+            for name in sorted(new_required - old_required):
+                issues.append(StructuralIssue(
+                    "request-required-property-added", "block", operation,
+                    f"{location.capitalize()} property became required: {name}",
+                ))
+        else:
+            for name in sorted(old_required - new_required):
+                issues.append(StructuralIssue(
+                    "response-required-property-relaxed", "block", operation,
+                    f"{location.capitalize()} property is no longer guaranteed: {name}",
+                ))
+
+        old_enum = old.get("enum")
+        new_enum = new.get("enum")
+        if isinstance(old_enum, list) and isinstance(new_enum, list):
+            if direction == "request" and any(value not in new_enum for value in old_enum):
+                issues.append(StructuralIssue(
+                    "request-enum-narrowed", "block", operation,
+                    f"{location.capitalize()} no longer accepts every previous enum value",
+                ))
+            if direction == "response" and any(value not in old_enum for value in new_enum):
+                issues.append(StructuralIssue(
+                    "response-enum-expanded", "block", operation,
+                    f"{location.capitalize()} may return a new enum value",
+                ))
+
+        if direction == "request" and old.get("nullable") is True and new.get("nullable") is not True:
+            issues.append(StructuralIssue(
+                "request-nullability-narrowed", "block", operation,
+                f"{location.capitalize()} no longer accepts null",
+            ))
+        if direction == "response" and old.get("nullable") is not True and new.get("nullable") is True:
+            issues.append(StructuralIssue(
+                "response-nullability-expanded", "block", operation,
+                f"{location.capitalize()} may now return null",
+            ))
+
+        for name in old_properties.keys() & new_properties.keys():
+            self._compare_schema(
+                operation,
+                self._mapping(old_properties[name]),
+                self._mapping(new_properties[name]),
+                issues,
+                direction,
+                f"{location}.{name}",
+                visited,
+            )
+        self._compare_schema(
+            operation,
+            self._mapping(old.get("items")),
+            self._mapping(new.get("items")),
+            issues,
+            direction,
+            f"{location} items",
+            visited,
+        )
+
+    @staticmethod
+    def _schema_types(value: Any) -> set[str]:
+        if isinstance(value, str):
+            return {value}
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return set(value)
+        return set()
+
+    @staticmethod
+    def _required_names(value: Any, location: str) -> set[str]:
+        if value is None:
+            return set()
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"Schema required field must be a string list at {location}")
+        return set(value)
 
     def _operations(self, document: dict[str, Any]) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
@@ -243,4 +399,3 @@ class OpenApiDiffer:
     @staticmethod
     def _mapping(value: Any) -> dict[str, Any]:
         return value if isinstance(value, dict) else {}
-

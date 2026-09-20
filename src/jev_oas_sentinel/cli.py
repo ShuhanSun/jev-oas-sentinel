@@ -23,6 +23,11 @@ def parser() -> argparse.ArgumentParser:
     compare = commands.add_parser("compare", help="Compare two OpenAPI documents")
     compare.add_argument("--base", type=Path, required=True, help="Baseline OpenAPI document")
     compare.add_argument("--head", type=Path, required=True, help="Candidate OpenAPI document")
+    compare.add_argument(
+        "--ref-root",
+        type=Path,
+        help="Allowed root for local $ref files (defaults to each specification's directory)",
+    )
     compare.add_argument("--format", choices=("json", "markdown", "sarif"), default="json")
     compare.add_argument("--output", type=Path, help="Write output to a file")
     compare.add_argument("--mode", choices=("advisory", "enforce"), default="advisory")
@@ -65,8 +70,8 @@ def run(
             raise ValueError("Thresholds must satisfy 0 <= review <= block <= 1")
         if args.output and args.jev_io_output and args.output.resolve() == args.jev_io_output.resolve():
             raise ValueError("--output and --jev-io-output must use different files")
-        base = load_spec(args.base)
-        head = load_spec(args.head)
+        base = load_spec(args.base, args.ref_root)
+        head = load_spec(args.head, args.ref_root)
         differ = OpenApiDiffer()
         changes = differ.compare(base, head)
         trace_events: list[dict[str, object]] | None = (

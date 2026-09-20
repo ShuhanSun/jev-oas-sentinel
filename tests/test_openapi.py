@@ -13,6 +13,87 @@ def spec(operation: dict, path_parameters: list | None = None) -> dict:
 
 
 class OpenApiDifferTest(unittest.TestCase):
+    def test_detects_required_request_property_added(self) -> None:
+        old = spec({
+            "requestBody": {"content": {"application/json": {"schema": {
+                "type": "object", "properties": {"name": {"type": "string"}},
+            }}}},
+            "responses": {},
+        })
+        new = spec({
+            "requestBody": {"content": {"application/json": {"schema": {
+                "type": "object", "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            }}}},
+            "responses": {},
+        })
+
+        issues = OpenApiDiffer().compare(old, new)[0].structural_issues
+
+        self.assertIn("request-required-property-added", {issue.rule_id for issue in issues})
+
+    def test_detects_response_property_removed(self) -> None:
+        old = spec({"responses": {"200": {"content": {"application/json": {"schema": {
+            "type": "object", "properties": {"id": {"type": "string"}},
+        }}}}}})
+        new = spec({"responses": {"200": {"content": {"application/json": {"schema": {
+            "type": "object", "properties": {},
+        }}}}}})
+
+        issues = OpenApiDiffer().compare(old, new)[0].structural_issues
+
+        self.assertIn("response-property-removed", {issue.rule_id for issue in issues})
+
+    def test_detects_response_enum_expansion(self) -> None:
+        old = spec({"responses": {"200": {"content": {"application/json": {"schema": {
+            "type": "string", "enum": ["active"],
+        }}}}}})
+        new = spec({"responses": {"200": {"content": {"application/json": {"schema": {
+            "type": "string", "enum": ["active", "archived"],
+        }}}}}})
+
+        issues = OpenApiDiffer().compare(old, new)[0].structural_issues
+
+        self.assertIn("response-enum-expanded", {issue.rule_id for issue in issues})
+
+    def test_detects_response_media_type_removed(self) -> None:
+        old = spec({"responses": {"200": {"content": {
+            "application/json": {"schema": {"type": "object"}},
+            "application/xml": {"schema": {"type": "object"}},
+        }}}})
+        new = spec({"responses": {"200": {"content": {
+            "application/json": {"schema": {"type": "object"}},
+        }}}})
+
+        issues = OpenApiDiffer().compare(old, new)[0].structural_issues
+
+        self.assertIn("response-media-type-removed", {issue.rule_id for issue in issues})
+
+    def test_allows_request_type_expansion_but_blocks_response_type_expansion(self) -> None:
+        old_request = spec({
+            "requestBody": {"content": {"application/json": {"schema": {"type": "string"}}}},
+            "responses": {},
+        })
+        new_request = spec({
+            "requestBody": {"content": {"application/json": {"schema": {"type": ["string", "null"]}}}},
+            "responses": {},
+        })
+        request_rules = {
+            issue.rule_id for issue in OpenApiDiffer().compare(old_request, new_request)[0].structural_issues
+        }
+        self.assertNotIn("request-schema-type-incompatible", request_rules)
+
+        old_response = spec({"responses": {"200": {"content": {"application/json": {
+            "schema": {"type": "string"},
+        }}}}})
+        new_response = spec({"responses": {"200": {"content": {"application/json": {
+            "schema": {"type": ["string", "null"]},
+        }}}}})
+        response_rules = {
+            issue.rule_id for issue in OpenApiDiffer().compare(old_response, new_response)[0].structural_issues
+        }
+        self.assertIn("response-schema-type-incompatible", response_rules)
+
     def test_detects_required_parameter(self) -> None:
         old = spec({"responses": {"200": {"description": "ok"}}})
         new = spec({

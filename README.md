@@ -11,9 +11,22 @@ JEV never writes a review or changes a specification. It returns typed decisions
 
 ## Status
 
-This is an MVP. It supports OpenAPI JSON and the common YAML subset used by the included fixtures. YAML anchors, custom tags, and merge keys are rejected rather than interpreted incorrectly. Advisory mode is the default.
+This is an MVP. It supports OpenAPI JSON and standards-compliant safe YAML,
+including anchors and merge keys. Internal and multi-file local `$ref` targets
+are resolved with cycle protection. Remote `$ref` targets are rejected rather
+than fetched implicitly. Advisory mode is the default.
 
-Local `$ref` and remote `$ref` targets are not dereferenced in this release. A changed reference is routed to structural review rather than silently treated as compatible.
+Local references are restricted to the specification's directory tree by
+default. For repositories that keep shared schemas in a parent directory, set
+an explicit trusted root:
+
+```bash
+jev-oas-sentinel compare \
+  --base api/base/openapi.yaml \
+  --head api/head/openapi.yaml \
+  --ref-root . \
+  --no-jev
+```
 
 ## Requirements
 
@@ -21,10 +34,11 @@ Local `$ref` and remote `$ref` targets are not dereferenced in this release. A c
 - Python 3.9+ when running without `uv`
 - A TypeSafe API key for live semantic evaluation
 
-The only runtime dependency on Python 3.10+ is `truststore`, which securely uses
-the operating system's native certificate store. Tool installers keep the CLI
-isolated from system and project Python environments. Python 3.9 uses its
-configured OpenSSL CA bundle and can be given a private bundle explicitly.
+Runtime dependencies are PyYAML for standards-compliant OpenAPI parsing and,
+on Python 3.10+, `truststore` for the operating system's native certificate
+store. Tool installers keep the CLI isolated from system and project Python
+environments. Python 3.9 uses its configured OpenSSL CA bundle and can be given
+a private bundle explicitly.
 
 ## Install
 
@@ -132,7 +146,7 @@ jev-oas-sentinel compare \
 The repository includes a composite action. A complete pull-request example is available at [`examples/github-workflow.yaml`](examples/github-workflow.yaml).
 
 ```yaml
-- uses: ShuhanSun/jev-oas-sentinel@v0.3.1
+- uses: ShuhanSun/jev-oas-sentinel@v0.4.0
   with:
     base: /tmp/openapi-base.yaml
     head: src/main/resources/openapi.yaml
@@ -163,6 +177,12 @@ Do not enable enforcement until the questions and thresholds have been evaluated
 - optional parameters becoming required;
 - required request bodies being introduced;
 - removed response status codes;
+- removed request or response media types;
+- removed request or response properties;
+- request properties becoming required;
+- response properties no longer being guaranteed;
+- request enum narrowing and response enum expansion;
+- incompatible schema type or nullability changes;
 - security requirement changes;
 - other non-documentation structural changes, conservatively routed to review.
 
