@@ -65,7 +65,9 @@ runs:
     - name: Set up uv
       uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       with:
-        enable-cache: true
+        # Composite actions run inside arbitrary consumer repositories, many of
+        # which have no Python dependency files for setup-uv to fingerprint.
+        enable-cache: false
 
     - name: Compare OpenAPI contracts
       shell: bash

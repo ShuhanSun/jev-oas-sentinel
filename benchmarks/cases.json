@@ -1,0 +1,82 @@
+[
+  {
+    "id": "pagination-default",
+    "dimension": "pagination",
+    "operation": "GET /orders",
+    "old": "Returns 100 orders per page by default. Use next_cursor to continue.",
+    "new": "Returns 20 orders per page by default. Use next_cursor to continue.",
+    "risk": "Clients may silently process fewer records per request."
+  },
+  {
+    "id": "ordering-guarantee",
+    "dimension": "ordering",
+    "operation": "GET /events",
+    "old": "Events are returned in ascending creation-time order.",
+    "new": "Event order is unspecified and may change between requests.",
+    "risk": "Clients that rely on stable ordering may display or process events incorrectly."
+  },
+  {
+    "id": "retry-idempotency",
+    "dimension": "retry/idempotency",
+    "operation": "POST /payments",
+    "old": "Requests with the same Idempotency-Key are safe to retry for 24 hours.",
+    "new": "Idempotency-Key values are retained on a best-effort basis.",
+    "risk": "Automatic retries may create duplicate payments."
+  },
+  {
+    "id": "not-found-meaning",
+    "dimension": "error semantics",
+    "operation": "GET /profiles/{id}",
+    "old": "A 404 response means the profile does not exist.",
+    "new": "A 404 response may mean the profile is private or does not exist.",
+    "risk": "Clients can no longer distinguish absence from authorization policy."
+  },
+  {
+    "id": "timestamp-zone",
+    "dimension": "response meaning",
+    "operation": "GET /reports",
+    "old": "All timestamps are returned in UTC.",
+    "new": "Timestamps are returned in the account's configured local time zone.",
+    "risk": "Existing timestamp parsing and comparison logic may shift values."
+  },
+  {
+    "id": "authorization-behavior",
+    "dimension": "authorization",
+    "operation": "GET /invoices",
+    "old": "Any authenticated account member can list invoices.",
+    "new": "Only account administrators can list invoices.",
+    "risk": "Previously authorized callers may start receiving authorization failures."
+  },
+  {
+    "id": "empty-collection",
+    "dimension": "response meaning",
+    "operation": "GET /recommendations",
+    "old": "When no recommendations exist, the endpoint returns an empty items array.",
+    "new": "When no recommendations exist, the endpoint may omit the items field.",
+    "risk": "Clients expecting an iterable array may fail on a missing value."
+  },
+  {
+    "id": "rate-limit-window",
+    "dimension": "retry behavior",
+    "operation": "GET /search",
+    "old": "The rate limit resets 60 seconds after the first request in the window.",
+    "new": "Rate-limit reset time is determined dynamically by service load.",
+    "risk": "Fixed retry schedules may repeatedly retry before capacity is available."
+  },
+  {
+    "id": "currency-units",
+    "dimension": "response meaning",
+    "operation": "GET /balances",
+    "old": "The amount field is expressed in the currency's minor unit, such as cents.",
+    "new": "The amount field is expressed in the currency's major unit, such as dollars.",
+    "risk": "Consumers may display or transfer values at the wrong magnitude."
+  },
+  {
+    "id": "deprecation-timeline",
+    "dimension": "deprecation",
+    "operation": "POST /legacy-export",
+    "old": "This operation remains supported until 2027-12-31.",
+    "new": "This operation will be removed after 2026-12-31.",
+    "risk": "The migration window is shortened by one year."
+  }
+]

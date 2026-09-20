@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a concrete compatibility check or workflow improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: API compatibility problem
+      description: Describe the real consumer-visible change this would catch or the workflow friction it would remove.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Minimal OpenAPI example
+      description: Show sanitized before/after contract fragments when possible.
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Best-fit layer
+      options:
+        - Deterministic structural rule
+        - Jev semantic question
+        - Policy or suppression
+        - Report or SARIF
+        - GitHub Action or CI integration
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Explain when the change should pass, request review, or block.
+    validations:
+      required: true

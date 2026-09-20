@@ -6,6 +6,8 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-JEV%20OAS%20Sentinel-blue?logo=github)](https://github.com/marketplace/actions/jev-oas-sentinel)
 
+![JEV OAS Sentinel combines deterministic schema inspection with semantic probability signals](https://raw.githubusercontent.com/ShuhanSun/jev-oas-sentinel/main/docs/assets/jev-oas-sentinel-hero.png)
+
 Catch behavioral breaking changes hidden in OpenAPI prose—changes that structural schema diff tools cannot see.
 
 `jev-oas-sentinel` compares two OpenAPI documents in two layers:
@@ -15,9 +17,14 @@ Catch behavioral breaking changes hidden in OpenAPI prose—changes that structu
 
 JEV never writes a review or changes a specification. It returns typed decisions and probabilities; deterministic Python code decides whether to pass, request review, or block.
 
+> [!NOTE]
+> JEV OAS Sentinel is an independent community project. It is not affiliated with, maintained by, or endorsed by TypeSafe AI.
+
 ## Try it in 30 seconds
 
 No API key or network call to JEV is needed for this preview:
+
+![Terminal demo showing a semantic review planned for changed OpenAPI prose](https://raw.githubusercontent.com/ShuhanSun/jev-oas-sentinel/main/docs/assets/jev-oas-sentinel-demo.gif)
 
 ```bash
 git clone https://github.com/ShuhanSun/jev-oas-sentinel.git
@@ -40,6 +47,9 @@ The example changes an operation's consumer-facing prose. The structural schema 
 |---|---|---|---|
 | review | GET /orders | semantic-evaluation-planned | Contract prose changed and would be sent to JEV |
 ```
+
+The reproducible [`benchmarks/`](benchmarks/) suite exercises ten semantic-only contract changes covering pagination, ordering, retries, authorization, timestamps, error meaning, and other consumer-visible promises.
+The independent [`jev-oas-sentinel-demo`](https://github.com/ShuhanSun/jev-oas-sentinel-demo) repository verifies the public `@v0` Action and SARIF upload from a real consumer workflow.
 
 ## Status
 
@@ -232,7 +242,7 @@ jev-oas-sentinel compare \
 The repository includes a composite action. A complete pull-request example is available at [`examples/github-workflow.yaml`](examples/github-workflow.yaml).
 
 ```yaml
-- uses: ShuhanSun/jev-oas-sentinel@v0.6.0
+- uses: ShuhanSun/jev-oas-sentinel@v0
   with:
     base: /tmp/openapi-base.yaml
     head: src/main/resources/openapi.yaml
@@ -309,3 +319,10 @@ uv build --no-sources
 ```
 
 CI runs the tests on Python 3.9, 3.11, and 3.13 and validates both distribution artifacts. See [docs/releasing.md](docs/releasing.md) for the trusted-publishing release process.
+
+## Community
+
+- Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
+- See the directional [`ROADMAP.md`](ROADMAP.md).
+- Use the issue forms for reproducible bugs and concrete compatibility proposals.
+- Use [`docs/launch.md`](docs/launch.md) when sharing the project without overstating benchmark or model claims.

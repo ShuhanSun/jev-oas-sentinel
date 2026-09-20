@@ -1,0 +1,7 @@
+include CONTRIBUTING.md
+include ROADMAP.md
+include SECURITY.md
+recursive-include benchmarks *.json *.md *.py
+recursive-include docs *.gif *.md *.png
+recursive-include examples *.yaml
+recursive-include scripts *.py
