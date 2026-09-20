@@ -113,20 +113,28 @@ class JevClient:
         model: str = DEFAULT_MODEL,
         ca_bundle: str | Path | None = None,
         trace: Callable[[dict[str, Any]], None] | None = None,
+        timeout: float = 30.0,
+        max_retries: int = 3,
     ) -> None:
         if not api_key.strip():
             raise ValueError("API key cannot be blank")
+        if timeout <= 0:
+            raise ValueError("JEV timeout must be greater than zero")
+        if max_retries < 0:
+            raise ValueError("JEV max retries cannot be negative")
         self.api_key = api_key.strip()
         self.endpoint = endpoint
         self.model = model
         self.ssl_context = _ssl_context(ca_bundle)
         self.trace = trace
+        self.timeout = timeout
+        self.max_retries = max_retries
         self.transport_metrics = JevTransportMetrics()
 
     def evaluate(self, state: dict[str, Any]) -> SemanticDecision:
         request_body = {"state": state, "model": self.model, "questions": questions()}
         payload = json.dumps(request_body).encode()
-        for attempt in range(1, 5):
+        for attempt in range(1, self.max_retries + 2):
             started = time.monotonic()
             request = Request(
                 self.endpoint,
@@ -136,7 +144,7 @@ class JevClient:
             )
             try:
                 with urlopen(  # noqa: S310 - configured API endpoint
-                    request, timeout=30, context=self.ssl_context
+                    request, timeout=self.timeout, context=self.ssl_context
                 ) as response:
                     body = response.read().decode("utf-8")
                     try:
@@ -156,7 +164,10 @@ class JevClient:
                     return self._parse(response_body)
             except HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
-                will_retry = attempt < 4 and (exc.code in {429, 529} or exc.code >= 500)
+                will_retry = (
+                    attempt <= self.max_retries
+                    and (exc.code in {429, 529} or exc.code >= 500)
+                )
                 duration_ms = self._finish_attempt(started, succeeded=False, retried=will_retry)
                 self._record_trace(
                     request_body, attempt, duration_ms, exc.code, _json_or_text(body),

@@ -43,6 +43,7 @@ class PolicyEngine:
         review_threshold: float,
         block_threshold: float,
         source: str,
+        skip_reason: str = "disabled",
     ) -> None:
         if not 0 <= review_threshold <= block_threshold <= 1:
             raise ValueError("Thresholds must satisfy 0 <= review <= block <= 1")
@@ -52,6 +53,7 @@ class PolicyEngine:
         self.review_threshold = review_threshold
         self.block_threshold = block_threshold
         self.source = source
+        self.skip_reason = skip_reason
 
     def evaluate(self, changes: list[OperationChange]) -> Evaluation:
         findings: list[Finding] = []
@@ -64,9 +66,12 @@ class PolicyEngine:
             if not change.semantic_changed:
                 continue
             if self.client is None:
+                dry_run = self.skip_reason == "dry-run"
                 findings.append(Finding(
-                    "semantic-evaluation-skipped", "review", change.operation,
-                    "Contract prose changed but JEV evaluation was disabled",
+                    "semantic-evaluation-planned" if dry_run else "semantic-evaluation-skipped",
+                    "review", change.operation,
+                    "Contract prose changed and would be sent to JEV"
+                    if dry_run else "Contract prose changed but JEV evaluation was disabled",
                     self.source, {"layer": "semantic"},
                 ))
                 continue

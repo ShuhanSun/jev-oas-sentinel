@@ -18,6 +18,8 @@ class CliTest(unittest.TestCase):
             ca_bundle=None,
             endpoint="https://example.test/jev",
             model="jev-test",
+            timeout=30.0,
+            max_retries=3,
         )
 
         _live_client(
@@ -26,8 +28,57 @@ class CliTest(unittest.TestCase):
         )
 
         client.assert_called_once_with(
-            "test-key", "https://example.test/jev", "jev-test", "/etc/company-ca.pem", None
+            "test-key", "https://example.test/jev", "jev-test", "/etc/company-ca.pem", None,
+            timeout=30.0, max_retries=3,
         )
+
+    def test_dry_run_plans_calls_without_api_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "base.json"
+            head = root / "head.json"
+            base.write_text(json.dumps({
+                "openapi": "3.0.3", "paths": {"/x": {"get": {"description": "all"}}},
+            }))
+            head.write_text(json.dumps({
+                "openapi": "3.0.3", "paths": {"/x": {"get": {"description": "active"}}},
+            }))
+            output = StringIO()
+
+            exit_code = run(
+                ["compare", "--base", str(base), "--head", str(head), "--dry-run"],
+                stdout=output, stderr=StringIO(), environment={},
+            )
+
+            report = json.loads(output.getvalue())
+            self.assertEqual(0, exit_code)
+            self.assertEqual(1, report["metrics"]["planned_semantic_calls"])
+            self.assertEqual(0, report["metrics"]["semantic_attempts"])
+            self.assertEqual("semantic-evaluation-planned", report["findings"][0]["rule_id"])
+
+    def test_max_jev_calls_stops_before_api_key_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "base.json"
+            head = root / "head.json"
+            base.write_text(json.dumps({
+                "openapi": "3.0.3", "paths": {"/x": {"get": {"description": "all"}}},
+            }))
+            head.write_text(json.dumps({
+                "openapi": "3.0.3", "paths": {"/x": {"get": {"description": "active"}}},
+            }))
+            stderr = StringIO()
+
+            exit_code = run(
+                [
+                    "compare", "--base", str(base), "--head", str(head),
+                    "--max-jev-calls", "0",
+                ],
+                stdout=StringIO(), stderr=stderr, environment={},
+            )
+
+            self.assertEqual(2, exit_code)
+            self.assertIn("Planned JEV calls (1) exceed --max-jev-calls (0)", stderr.getvalue())
 
     def test_writes_empty_jev_trace_when_jev_is_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

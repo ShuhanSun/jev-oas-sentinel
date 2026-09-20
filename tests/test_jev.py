@@ -39,7 +39,7 @@ class JevClientTest(unittest.TestCase):
         success.__enter__.return_value = response
         urlopen.side_effect = [failed, success]
         events: list[dict[str, object]] = []
-        client = JevClient("top-secret-key", trace=events.append)
+        client = JevClient("top-secret-key", trace=events.append, timeout=12.5, max_retries=1)
 
         client.evaluate({"operation": "GET /orders"})
 
@@ -48,6 +48,7 @@ class JevClientTest(unittest.TestCase):
         self.assertEqual(1, client.transport_metrics.failures)
         self.assertEqual(1, client.transport_metrics.retries)
         self.assertTrue(events[0]["will_retry"])
+        self.assertEqual(12.5, urlopen.call_args.kwargs["timeout"])
         sleep.assert_called_once_with(0.0)
 
     @patch("jev_oas_sentinel.jev.urlopen")

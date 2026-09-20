@@ -92,6 +92,22 @@ jev-oas-sentinel compare \
   --format markdown
 ```
 
+Preview which operations would require JEV without an API key or network call:
+
+```bash
+jev-oas-sentinel compare \
+  --base examples/base-openapi.yaml \
+  --head examples/head-openapi.yaml \
+  --dry-run \
+  --format json
+```
+
+Bound API usage and transport behavior explicitly in CI:
+
+```bash
+--max-jev-calls 20 --timeout 30 --max-retries 3
+```
+
 The client also accepts `--api-key-file PATH`. Never commit that file.
 
 To inspect the exact JEV input and output, opt in to a sanitized trace:
@@ -146,7 +162,7 @@ jev-oas-sentinel compare \
 The repository includes a composite action. A complete pull-request example is available at [`examples/github-workflow.yaml`](examples/github-workflow.yaml).
 
 ```yaml
-- uses: ShuhanSun/jev-oas-sentinel@v0.4.0
+- uses: ShuhanSun/jev-oas-sentinel@v0.5.0
   with:
     base: /tmp/openapi-base.yaml
     head: src/main/resources/openapi.yaml

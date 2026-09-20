@@ -31,7 +31,13 @@ def parser() -> argparse.ArgumentParser:
     compare.add_argument("--format", choices=("json", "markdown", "sarif"), default="json")
     compare.add_argument("--output", type=Path, help="Write output to a file")
     compare.add_argument("--mode", choices=("advisory", "enforce"), default="advisory")
-    compare.add_argument("--no-jev", action="store_true", help="Run deterministic checks only")
+    execution = compare.add_mutually_exclusive_group()
+    execution.add_argument("--no-jev", action="store_true", help="Run deterministic checks only")
+    execution.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show which operations need JEV without making API requests",
+    )
     compare.add_argument("--fail-on-review", action="store_true", help="Exit 1 when review findings exist")
     compare.add_argument("--model", default=DEFAULT_MODEL)
     compare.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
@@ -51,6 +57,26 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="PATH",
         help="Write JEV request/response JSON to a file (never includes the API key)",
+    )
+    compare.add_argument(
+        "--max-jev-calls",
+        type=_nonnegative_integer,
+        metavar="N",
+        help="Stop before evaluation when more than N JEV calls are planned",
+    )
+    compare.add_argument(
+        "--timeout",
+        type=_positive_number,
+        default=30.0,
+        metavar="SECONDS",
+        help="Timeout for each JEV HTTP attempt (default: 30)",
+    )
+    compare.add_argument(
+        "--max-retries",
+        type=_nonnegative_integer,
+        default=3,
+        metavar="N",
+        help="Maximum retries after retryable JEV responses (default: 3)",
     )
     compare.add_argument("--review-threshold", type=_probability, default=0.65)
     compare.add_argument("--block-threshold", type=_probability, default=0.90)
@@ -74,26 +100,38 @@ def run(
         head = load_spec(args.head, args.ref_root)
         differ = OpenApiDiffer()
         changes = differ.compare(base, head)
+        planned_calls = sum(change.semantic_changed for change in changes)
+        if (
+            not args.no_jev
+            and not args.dry_run
+            and args.max_jev_calls is not None
+            and planned_calls > args.max_jev_calls
+        ):
+            raise ValueError(
+                f"Planned JEV calls ({planned_calls}) exceed --max-jev-calls ({args.max_jev_calls})"
+            )
         trace_events: list[dict[str, object]] | None = (
             [] if args.show_jev_io or args.jev_io_output else None
         )
-        client = None if args.no_jev else _live_client(
+        client = None if args.no_jev or args.dry_run else _live_client(
             args,
             environment or dict(os.environ),
             trace_events.append if trace_events is not None else None,
         )
         started = time.monotonic()
         evaluation = PolicyEngine(
-            differ, client, args.mode, args.review_threshold, args.block_threshold, str(args.head)
+            differ, client, args.mode, args.review_threshold, args.block_threshold, str(args.head),
+            "dry-run" if args.dry_run else "disabled",
         ).evaluate(changes)
         elapsed_ms = int((time.monotonic() - started) * 1000)
         transport = client.transport_metrics if client is not None else JevTransportMetrics()
         report = Report(
             __version__, datetime.now(timezone.utc), str(args.base), str(args.head), args.mode,
-            "disabled" if args.no_jev else args.model,
+            "disabled" if args.no_jev else "dry-run" if args.dry_run else args.model,
             evaluation.findings,
             {
                 "changed_operations": len(changes),
+                "planned_semantic_calls": planned_calls,
                 "semantic_attempts": evaluation.attempts,
                 "semantic_calls": evaluation.calls,
                 "semantic_successes": evaluation.calls,
@@ -139,7 +177,10 @@ def _live_client(
     if not api_key:
         raise ValueError("No TypeSafe API key found; set TYPESAFE_API_KEY, use --api-key-file, or pass --no-jev")
     ca_bundle = args.ca_bundle or environment.get("JEV_CA_BUNDLE") or environment.get("SSL_CERT_FILE")
-    return JevClient(api_key, args.endpoint, args.model, ca_bundle, trace)
+    return JevClient(
+        api_key, args.endpoint, args.model, ca_bundle, trace,
+        timeout=args.timeout, max_retries=args.max_retries,
+    )
 
 
 def _write_jev_io(
@@ -167,4 +208,18 @@ def _probability(value: str) -> float:
     parsed = float(value)
     if not 0 <= parsed <= 1:
         raise argparse.ArgumentTypeError("must be between 0 and 1")
+    return parsed
+
+
+def _nonnegative_integer(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be zero or greater")
+    return parsed
+
+
+def _positive_number(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
     return parsed

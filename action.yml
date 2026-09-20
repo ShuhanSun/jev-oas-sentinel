@@ -19,6 +19,10 @@ inputs:
     description: Disable semantic evaluation and run deterministic checks only
     required: false
     default: "false"
+  dry-run:
+    description: Plan semantic evaluations without calling JEV
+    required: false
+    default: "false"
   mode:
     description: advisory or enforce
     required: false
@@ -35,6 +39,18 @@ inputs:
     description: Fail the action when review findings exist
     required: false
     default: "false"
+  max-jev-calls:
+    description: Maximum number of JEV calls allowed in one run
+    required: false
+    default: "20"
+  timeout:
+    description: Timeout in seconds for each JEV HTTP attempt
+    required: false
+    default: "30"
+  max-retries:
+    description: Maximum retries after retryable JEV responses
+    required: false
+    default: "3"
 
 runs:
   using: composite
@@ -57,17 +73,24 @@ runs:
         SENTINEL_HEAD: ${{ inputs.head }}
         SENTINEL_REF_ROOT: ${{ inputs.ref-root }}
         SENTINEL_NO_JEV: ${{ inputs.no-jev }}
+        SENTINEL_DRY_RUN: ${{ inputs.dry-run }}
         SENTINEL_MODE: ${{ inputs.mode }}
         SENTINEL_FORMAT: ${{ inputs.format }}
         SENTINEL_OUTPUT: ${{ inputs.output }}
         SENTINEL_FAIL_ON_REVIEW: ${{ inputs.fail-on-review }}
+        SENTINEL_MAX_JEV_CALLS: ${{ inputs.max-jev-calls }}
+        SENTINEL_TIMEOUT: ${{ inputs.timeout }}
+        SENTINEL_MAX_RETRIES: ${{ inputs.max-retries }}
       run: |
-        args=(compare --base "$SENTINEL_BASE" --head "$SENTINEL_HEAD" --mode "$SENTINEL_MODE" --format "$SENTINEL_FORMAT" --output "$SENTINEL_OUTPUT")
+        args=(compare --base "$SENTINEL_BASE" --head "$SENTINEL_HEAD" --mode "$SENTINEL_MODE" --format "$SENTINEL_FORMAT" --output "$SENTINEL_OUTPUT" --max-jev-calls "$SENTINEL_MAX_JEV_CALLS" --timeout "$SENTINEL_TIMEOUT" --max-retries "$SENTINEL_MAX_RETRIES")
         if [[ -n "$SENTINEL_REF_ROOT" ]]; then
           args+=(--ref-root "$SENTINEL_REF_ROOT")
         fi
         if [[ "$SENTINEL_NO_JEV" == "true" ]]; then
           args+=(--no-jev)
+        fi
+        if [[ "$SENTINEL_DRY_RUN" == "true" ]]; then
+          args+=(--dry-run)
         fi
         if [[ "$SENTINEL_FAIL_ON_REVIEW" == "true" ]]; then
           args+=(--fail-on-review)
