@@ -1,4 +1,4 @@
-# jev-oas-sentinel
+# JEV OAS Sentinel — System One Semantic Compatibility for OpenAPI
 
 System One reasoning for API contracts—catch behavioral breaking changes that structural OpenAPI diff tools cannot see.
 
