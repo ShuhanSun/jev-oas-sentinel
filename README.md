@@ -1,6 +1,6 @@
 # jev-oas-sentinel
 
-Catch consumer-visible API changes hiding in “documentation-only” OpenAPI edits.
+System One reasoning for API contracts—catch behavioral breaking changes that structural OpenAPI diff tools cannot see.
 
 `jev-oas-sentinel` compares two OpenAPI documents in two layers:
 
