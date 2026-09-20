@@ -128,10 +128,11 @@ jev-oas-sentinel compare \
   --format markdown
 ```
 
-The versioned trace never includes the `Authorization` header or API key. Trace
-files are created with owner-only permissions on POSIX systems. They do include
-the contract fragments sent to JEV, so treat them as potentially sensitive and
-do not publish them unintentionally.
+The versioned trace omits request headers and recursively redacts the configured
+API key plus common credential fields from captured data. Trace files are
+created with owner-only permissions on POSIX systems. They do include the
+contract fragments sent to JEV, so treat them as potentially sensitive and do
+not publish them unintentionally.
 
 On Python 3.10 and newer, HTTPS verification uses the operating system's native
 certificate store, including enterprise CAs installed in macOS Keychain or the

@@ -53,10 +53,13 @@ class JevClientTest(unittest.TestCase):
 
     @patch("jev_oas_sentinel.jev.urlopen")
     def test_trace_records_io_without_api_key(self, urlopen: Mock) -> None:
+        api_key = "top-secret-key"
         response = Mock()
         response.status = 200
         response.read.return_value = json.dumps({
             "model": "resolved-model",
+            "echoed_authorization": f"Bearer {api_key}",
+            "debug": {"Authorization": f"Bearer {api_key}"},
             "answers": {
                 "change_kind": {
                     "type": "choice", "choice": "breaking", "confidence": .94,
@@ -76,14 +79,16 @@ class JevClientTest(unittest.TestCase):
         }).encode()
         urlopen.return_value.__enter__.return_value = response
         events: list[dict[str, object]] = []
-        client = JevClient("top-secret-key", trace=events.append)
+        client = JevClient(api_key, trace=events.append)
 
         client.evaluate({"operation": "GET /orders"})
 
         self.assertEqual(1, len(events))
         self.assertEqual("GET /orders", events[0]["request"]["state"]["operation"])
         self.assertEqual("resolved-model", events[0]["response"]["model"])
-        self.assertNotIn("top-secret-key", json.dumps(events))
+        self.assertEqual("Bearer [REDACTED]", events[0]["response"]["echoed_authorization"])
+        self.assertEqual("[REDACTED]", events[0]["response"]["debug"]["Authorization"])
+        self.assertNotIn(api_key, json.dumps(events))
         self.assertEqual(1, client.transport_metrics.attempts)
         self.assertEqual(1, client.transport_metrics.successes)
         self.assertEqual(0, client.transport_metrics.failures)

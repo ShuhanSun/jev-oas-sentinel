@@ -18,6 +18,18 @@ except ImportError:  # Python 3.9 uses OpenSSL's configured CA bundle instead.
 
 DEFAULT_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
 DEFAULT_MODEL = "jev-1.13.0"
+TRACE_REDACTION = "[REDACTED]"
+_SENSITIVE_TRACE_KEYS = {
+    "accesstoken",
+    "apikey",
+    "authorization",
+    "password",
+    "proxyauthorization",
+    "refreshtoken",
+    "secret",
+    "token",
+    "xapikey",
+}
 
 
 @dataclass(frozen=True)
@@ -213,7 +225,7 @@ class JevClient:
             event["error"] = error
         if will_retry:
             event["will_retry"] = True
-        self.trace(event)
+        self.trace(_redact_trace(event, self.api_key))
 
     def _finish_attempt(self, started: float, *, succeeded: bool, retried: bool = False) -> int:
         duration_ms = int((time.monotonic() - started) * 1000)
@@ -308,3 +320,31 @@ def _json_or_text(body: str) -> Any:
         return json.loads(body)
     except json.JSONDecodeError:
         return body
+
+
+def _redact_trace(value: Any, api_key: str) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[Any, Any] = {}
+        for key, item in value.items():
+            redacted_key = _redact_text(key, api_key) if isinstance(key, str) else key
+            if isinstance(key, str) and _is_sensitive_trace_key(key):
+                redacted[redacted_key] = TRACE_REDACTION
+            else:
+                redacted[redacted_key] = _redact_trace(item, api_key)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_trace(item, api_key) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_trace(item, api_key) for item in value)
+    if isinstance(value, str):
+        return _redact_text(value, api_key)
+    return value
+
+
+def _is_sensitive_trace_key(key: str) -> bool:
+    normalized = "".join(character for character in key.casefold() if character.isalnum())
+    return normalized in _SENSITIVE_TRACE_KEYS
+
+
+def _redact_text(value: str, api_key: str) -> str:
+    return value.replace(api_key, TRACE_REDACTION) if api_key else value

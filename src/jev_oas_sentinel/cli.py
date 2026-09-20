@@ -113,9 +113,10 @@ def run(
         trace_events: list[dict[str, object]] | None = (
             [] if args.show_jev_io or args.jev_io_output else None
         )
+        runtime_environment = dict(os.environ) if environment is None else environment
         client = None if args.no_jev or args.dry_run else _live_client(
             args,
-            environment or dict(os.environ),
+            runtime_environment,
             trace_events.append if trace_events is not None else None,
         )
         started = time.monotonic()

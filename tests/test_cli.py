@@ -128,10 +128,11 @@ class CliTest(unittest.TestCase):
             document = Path(directory) / "openapi.json"
             document.write_text(json.dumps({"openapi": "3.0.3", "paths": {}}))
             stderr = StringIO()
-            exit_code = run(
-                ["compare", "--base", str(document), "--head", str(document)],
-                stdout=StringIO(), stderr=stderr, environment={},
-            )
+            with patch.dict(os.environ, {"TYPESAFE_API_KEY": "ambient-key"}, clear=True):
+                exit_code = run(
+                    ["compare", "--base", str(document), "--head", str(document)],
+                    stdout=StringIO(), stderr=stderr, environment={},
+                )
             self.assertEqual(2, exit_code)
             self.assertIn("No TypeSafe API key found", stderr.getvalue())
 
