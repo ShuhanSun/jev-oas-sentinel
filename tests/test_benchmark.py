@@ -9,7 +9,7 @@ class BenchmarkTest(unittest.TestCase):
     def test_all_semantic_cases_are_routed_without_structural_findings(self) -> None:
         results = evaluate_cases(load_cases())
 
-        self.assertEqual(10, len(results))
+        self.assertEqual(11, len(results))
         self.assertTrue(all(result["passed"] for result in results))
         self.assertTrue(all(result["structural_findings"] == 0 for result in results))
         self.assertTrue(all(result["semantic_review_planned"] for result in results))
@@ -18,8 +18,9 @@ class BenchmarkTest(unittest.TestCase):
         results = evaluate_cases(load_cases())
         report = render_markdown(results)
 
-        self.assertIn("Result: 10/10 cases routed as expected", report)
+        self.assertIn("Result: 11/11 cases routed as expected", report)
         self.assertIn("`retry-idempotency`", report)
+        self.assertIn("`webhook-retry-guarantee`", report)
 
 
 if __name__ == "__main__":

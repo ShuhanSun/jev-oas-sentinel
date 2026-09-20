@@ -4,7 +4,7 @@ These cases keep the OpenAPI structure stable while changing a consumer-facing p
 The benchmark verifies that the deterministic layer reports no definite structural break and that Sentinel routes each change to JEV semantic review.
 It does not claim model accuracy and does not call JEV.
 
-**Result: 10/10 cases routed as expected.**
+**Result: 11/11 cases routed as expected.**
 
 | Case | Dimension | Operation | Structural findings | JEV review planned |
 |---|---|---|---:|:---:|
@@ -18,6 +18,7 @@ It does not claim model accuracy and does not call JEV.
 | `rate-limit-window` | retry behavior | `GET /search` | 0 | yes |
 | `currency-units` | response meaning | `GET /balances` | 0 | yes |
 | `deprecation-timeline` | deprecation | `POST /legacy-export` | 0 | yes |
+| `webhook-retry-guarantee` | retry behavior | `POST /webhooks` | 0 | yes |
 
 ## Why these changes matter
 
@@ -31,3 +32,4 @@ It does not claim model accuracy and does not call JEV.
 - **rate-limit-window**: Fixed retry schedules may repeatedly retry before capacity is available.
 - **currency-units**: Consumers may display or transfer values at the wrong magnitude.
 - **deprecation-timeline**: The migration window is shortened by one year.
+- **webhook-retry-guarantee**: Consumers may miss webhook events if they rely on the previous retry guarantee.

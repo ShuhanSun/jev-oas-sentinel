@@ -78,5 +78,13 @@
     "old": "This operation remains supported until 2027-12-31.",
     "new": "This operation will be removed after 2026-12-31.",
     "risk": "The migration window is shortened by one year."
+  },
+  {
+    "id": "webhook-retry-guarantee",
+    "dimension": "retry behavior",
+    "operation": "POST /webhooks",
+    "old": "Webhook deliveries are retried for 24 hours with exponential backoff.",
+    "new": "Webhook retries may stop after repeated delivery failures.",
+    "risk": "Consumers may miss webhook events if they rely on the previous retry guarantee."
   }
 ]
