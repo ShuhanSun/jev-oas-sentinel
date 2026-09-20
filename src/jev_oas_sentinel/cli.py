@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import json
 import os
 from pathlib import Path
 import sys
 import time
-from typing import Sequence, TextIO
+from typing import Any, Callable, Sequence, TextIO
 
 from . import __version__
 from .jev import DEFAULT_ENDPOINT, DEFAULT_MODEL, JevClient
@@ -35,6 +36,17 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="PEM CA bundle for TLS verification (also JEV_CA_BUNDLE or SSL_CERT_FILE)",
     )
+    compare.add_argument(
+        "--show-jev-io",
+        action="store_true",
+        help="Print JEV request/response JSON to stderr (never includes the API key)",
+    )
+    compare.add_argument(
+        "--jev-io-output",
+        type=Path,
+        metavar="PATH",
+        help="Write JEV request/response JSON to a file (never includes the API key)",
+    )
     compare.add_argument("--review-threshold", type=_probability, default=0.65)
     compare.add_argument("--block-threshold", type=_probability, default=0.90)
     return root
@@ -51,11 +63,20 @@ def run(
         args = parser().parse_args(argv)
         if args.review_threshold > args.block_threshold:
             raise ValueError("Thresholds must satisfy 0 <= review <= block <= 1")
+        if args.output and args.jev_io_output and args.output.resolve() == args.jev_io_output.resolve():
+            raise ValueError("--output and --jev-io-output must use different files")
         base = load_spec(args.base)
         head = load_spec(args.head)
         differ = OpenApiDiffer()
         changes = differ.compare(base, head)
-        client = None if args.no_jev else _live_client(args, environment or dict(os.environ))
+        trace_events: list[dict[str, object]] | None = (
+            [] if args.show_jev_io or args.jev_io_output else None
+        )
+        client = None if args.no_jev else _live_client(
+            args,
+            environment or dict(os.environ),
+            trace_events.append if trace_events is not None else None,
+        )
         started = time.monotonic()
         evaluation = PolicyEngine(
             differ, client, args.mode, args.review_threshold, args.block_threshold, str(args.head)
@@ -73,6 +94,8 @@ def run(
                 "elapsed_ms": elapsed_ms,
             },
         )
+        if trace_events is not None:
+            _write_jev_io(args, trace_events, stderr)
         rendered = render(report, args.format)
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -90,7 +113,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     return run(argv)
 
 
-def _live_client(args: argparse.Namespace, environment: dict[str, str]) -> JevClient:
+def _live_client(
+    args: argparse.Namespace,
+    environment: dict[str, str],
+    trace: Callable[[dict[str, Any]], None] | None = None,
+) -> JevClient:
     if args.api_key_file:
         api_key = args.api_key_file.read_text(encoding="utf-8").strip()
     else:
@@ -98,7 +125,22 @@ def _live_client(args: argparse.Namespace, environment: dict[str, str]) -> JevCl
     if not api_key:
         raise ValueError("No TypeSafe API key found; set TYPESAFE_API_KEY, use --api-key-file, or pass --no-jev")
     ca_bundle = args.ca_bundle or environment.get("JEV_CA_BUNDLE") or environment.get("SSL_CERT_FILE")
-    return JevClient(api_key, args.endpoint, args.model, ca_bundle)
+    return JevClient(api_key, args.endpoint, args.model, ca_bundle, trace)
+
+
+def _write_jev_io(
+    args: argparse.Namespace,
+    events: list[dict[str, object]],
+    stderr: TextIO,
+) -> None:
+    rendered = json.dumps({"events": events}, indent=2, ensure_ascii=False) + "\n"
+    if args.show_jev_io:
+        print("JEV request/response trace:", file=stderr)
+        stderr.write(rendered)
+    if args.jev_io_output:
+        args.jev_io_output.parent.mkdir(parents=True, exist_ok=True)
+        args.jev_io_output.write_text(rendered, encoding="utf-8")
+        print(f"Wrote JEV request/response trace to {args.jev_io_output}", file=stderr)
 
 
 def _probability(value: str) -> float:

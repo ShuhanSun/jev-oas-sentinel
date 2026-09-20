@@ -1,5 +1,5 @@
-from io import StringIO
 import argparse
+from io import StringIO
 import json
 from pathlib import Path
 import tempfile
@@ -25,8 +25,26 @@ class CliTest(unittest.TestCase):
         )
 
         client.assert_called_once_with(
-            "test-key", "https://example.test/jev", "jev-test", "/etc/company-ca.pem"
+            "test-key", "https://example.test/jev", "jev-test", "/etc/company-ca.pem", None
         )
+
+    def test_writes_empty_jev_trace_when_jev_is_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            document = root / "openapi.json"
+            trace = root / "jev-io.json"
+            document.write_text(json.dumps({"openapi": "3.0.3", "paths": {}}))
+
+            exit_code = run(
+                [
+                    "compare", "--base", str(document), "--head", str(document),
+                    "--no-jev", "--jev-io-output", str(trace),
+                ],
+                stdout=StringIO(), stderr=StringIO(), environment={},
+            )
+
+            self.assertEqual(0, exit_code)
+            self.assertEqual({"events": []}, json.loads(trace.read_text()))
 
     def test_offline_comparison(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -77,6 +77,28 @@ jev-oas-sentinel compare \
 
 The client also accepts `--api-key-file PATH`. Never commit that file.
 
+To inspect the exact JEV input and output, opt in to a sanitized trace:
+
+```bash
+# Show the trace on stderr while keeping the report on stdout.
+jev-oas-sentinel compare \
+  --base examples/base-openapi.yaml \
+  --head examples/head-openapi.yaml \
+  --show-jev-io \
+  --format markdown
+
+# Or write the trace as JSON.
+jev-oas-sentinel compare \
+  --base examples/base-openapi.yaml \
+  --head examples/head-openapi.yaml \
+  --jev-io-output reports/jev-io.json \
+  --format markdown
+```
+
+The trace never includes the `Authorization` header or API key. It does include
+the contract fragments sent to JEV, so treat trace files as potentially
+sensitive and do not publish them unintentionally.
+
 On Python 3.10 and newer, HTTPS verification uses the operating system's native
 certificate store, including enterprise CAs installed in macOS Keychain or the
 Windows certificate store. For Python 3.9 or a private CA bundle, use
@@ -106,7 +128,7 @@ jev-oas-sentinel compare \
 The repository includes a composite action. A complete pull-request example is available at [`examples/github-workflow.yaml`](examples/github-workflow.yaml).
 
 ```yaml
-- uses: ShuhanSun/jev-oas-sentinel@v0.2.0
+- uses: ShuhanSun/jev-oas-sentinel@v0.3.0
   with:
     base: /tmp/openapi-base.yaml
     head: src/main/resources/openapi.yaml

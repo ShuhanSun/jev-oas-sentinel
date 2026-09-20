@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import Mock, patch
 
@@ -5,6 +6,40 @@ from jev_oas_sentinel.jev import JevClient, _ssl_context
 
 
 class JevClientTest(unittest.TestCase):
+    @patch("jev_oas_sentinel.jev.urlopen")
+    def test_trace_records_io_without_api_key(self, urlopen: Mock) -> None:
+        response = Mock()
+        response.status = 200
+        response.read.return_value = json.dumps({
+            "model": "resolved-model",
+            "answers": {
+                "change_kind": {
+                    "type": "choice", "choice": "breaking", "confidence": .94,
+                    "probabilities": {"breaking": .95},
+                },
+                "affected_dimension": {
+                    "type": "choice", "choice": "default_behavior", "confidence": .98,
+                    "probabilities": {"default_behavior": 1.0},
+                },
+                "old_promise_preserved": {"type": "noul", "noul": .03},
+                "migration_burden": {
+                    "type": "score", "score": 1.8, "confidence": .8,
+                    "probabilities": {"2": .8},
+                },
+            },
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }).encode()
+        urlopen.return_value.__enter__.return_value = response
+        events: list[dict[str, object]] = []
+        client = JevClient("top-secret-key", trace=events.append)
+
+        client.evaluate({"operation": "GET /orders"})
+
+        self.assertEqual(1, len(events))
+        self.assertEqual("GET /orders", events[0]["request"]["state"]["operation"])
+        self.assertEqual("resolved-model", events[0]["response"]["model"])
+        self.assertNotIn("top-secret-key", json.dumps(events))
+
     @patch("jev_oas_sentinel.jev.ssl.create_default_context")
     def test_explicit_ca_bundle_overrides_native_store(self, create_default_context: Mock) -> None:
         expected = Mock()

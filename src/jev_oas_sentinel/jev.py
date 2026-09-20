@@ -6,7 +6,7 @@ from pathlib import Path
 import ssl
 import sys
 import time
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -103,6 +103,7 @@ class JevClient:
         endpoint: str = DEFAULT_ENDPOINT,
         model: str = DEFAULT_MODEL,
         ca_bundle: str | Path | None = None,
+        trace: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         if not api_key.strip():
             raise ValueError("API key cannot be blank")
@@ -110,10 +111,13 @@ class JevClient:
         self.endpoint = endpoint
         self.model = model
         self.ssl_context = _ssl_context(ca_bundle)
+        self.trace = trace
 
     def evaluate(self, state: dict[str, Any]) -> SemanticDecision:
-        payload = json.dumps({"state": state, "model": self.model, "questions": questions()}).encode()
+        request_body = {"state": state, "model": self.model, "questions": questions()}
+        payload = json.dumps(request_body).encode()
         for attempt in range(1, 5):
+            started = time.monotonic()
             request = Request(
                 self.endpoint,
                 data=payload,
@@ -124,18 +128,66 @@ class JevClient:
                 with urlopen(  # noqa: S310 - configured API endpoint
                     request, timeout=30, context=self.ssl_context
                 ) as response:
-                    return self._parse(json.loads(response.read().decode("utf-8")))
+                    body = response.read().decode("utf-8")
+                    try:
+                        response_body = json.loads(body)
+                    except json.JSONDecodeError as exc:
+                        self._record_trace(
+                            request_body, attempt, started, getattr(response, "status", 200),
+                            body, f"Invalid JSON response: {exc.msg}",
+                        )
+                        raise
+                    self._record_trace(
+                        request_body, attempt, started, getattr(response, "status", 200), response_body
+                    )
+                    return self._parse(response_body)
             except HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
-                if attempt < 4 and (exc.code in {429, 529} or exc.code >= 500):
+                will_retry = attempt < 4 and (exc.code in {429, 529} or exc.code >= 500)
+                self._record_trace(
+                    request_body, attempt, started, exc.code, _json_or_text(body),
+                    f"HTTP {exc.code}", will_retry,
+                )
+                if will_retry:
                     delay = self._retry_delay(exc.headers.get("Retry-After"), attempt)
                     print(f"JEV request returned HTTP {exc.code}; retrying in {delay:.1f}s", file=sys.stderr)
                     time.sleep(delay)
                     continue
                 raise OSError(f"JEV request failed with HTTP {exc.code}: {self._safe_body(body)}") from exc
-            except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+            except (URLError, TimeoutError) as exc:
+                self._record_trace(request_body, attempt, started, error=str(exc))
+                raise OSError(f"JEV request failed: {exc}") from exc
+            except json.JSONDecodeError as exc:
                 raise OSError(f"JEV request failed: {exc}") from exc
         raise OSError("JEV request exhausted retries")
+
+    def _record_trace(
+        self,
+        request_body: dict[str, Any],
+        attempt: int,
+        started: float,
+        status: int | None = None,
+        response: Any = None,
+        error: str | None = None,
+        will_retry: bool = False,
+    ) -> None:
+        if self.trace is None:
+            return
+        event: dict[str, Any] = {
+            "endpoint": self.endpoint,
+            "attempt": attempt,
+            "duration_ms": int((time.monotonic() - started) * 1000),
+            "request": request_body,
+        }
+        if status is not None:
+            event["status"] = status
+        if response is not None:
+            event["response"] = response
+        if error:
+            event["error"] = error
+        if will_retry:
+            event["will_retry"] = True
+        self.trace(event)
 
     def _parse(self, root: Any) -> SemanticDecision:
         try:
@@ -211,3 +263,10 @@ def _ssl_context(ca_bundle: str | Path | None) -> ssl.SSLContext:
     if truststore is not None:
         return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     return ssl.create_default_context()
+
+
+def _json_or_text(body: str) -> Any:
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return body

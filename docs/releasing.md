@@ -19,7 +19,7 @@ Create a protected GitHub environment named `pypi`. For production releases, req
 2. Run `uv lock`, `uv sync --locked`, and the test suite.
 3. Run `uv build --no-sources` and `uvx --from twine==7.0.0 twine check dist/*`.
 4. Commit the version and lockfile changes.
-5. Create and publish a GitHub release tagged with the same version, for example `v0.2.0`.
+5. Create and publish a GitHub release tagged with the same version, for example `v0.3.0`.
 6. Approve the protected `pypi` environment deployment if required.
 
 Publishing the GitHub release triggers `.github/workflows/publish.yml`. The workflow rebuilds, tests, validates, and uploads both the wheel and source distribution through OIDC.
