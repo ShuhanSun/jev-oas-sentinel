@@ -1,6 +1,11 @@
 # JEV OAS Sentinel — System One Semantic Compatibility for OpenAPI
 
-System One reasoning for API contracts—catch behavioral breaking changes that structural OpenAPI diff tools cannot see.
+[![CI](https://github.com/ShuhanSun/jev-oas-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/ShuhanSun/jev-oas-sentinel/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/jev-oas-sentinel.svg)](https://pypi.org/project/jev-oas-sentinel/)
+[![Python](https://img.shields.io/pypi/pyversions/jev-oas-sentinel.svg)](https://pypi.org/project/jev-oas-sentinel/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+Catch behavioral breaking changes hidden in OpenAPI prose—changes that structural schema diff tools cannot see.
 
 `jev-oas-sentinel` compares two OpenAPI documents in two layers:
 
@@ -9,9 +14,35 @@ System One reasoning for API contracts—catch behavioral breaking changes that 
 
 JEV never writes a review or changes a specification. It returns typed decisions and probabilities; deterministic Python code decides whether to pass, request review, or block.
 
+## Try it in 30 seconds
+
+No API key or network call to JEV is needed for this preview:
+
+```bash
+git clone https://github.com/ShuhanSun/jev-oas-sentinel.git
+cd jev-oas-sentinel
+uvx jev-oas-sentinel compare \
+  --base examples/base-openapi.yaml \
+  --head examples/head-openapi.yaml \
+  --dry-run \
+  --format markdown
+```
+
+The example changes an operation's consumer-facing prose. The structural schema remains compatible, but Sentinel identifies the operation that needs semantic review:
+
+```text
+| Block | Review | Notice |
+|---:|---:|---:|
+|0|1|0|
+
+| Severity | Operation | Rule | Finding |
+|---|---|---|---|
+| review | GET /orders | semantic-evaluation-planned | Contract prose changed and would be sent to JEV |
+```
+
 ## Status
 
-This is an MVP. It supports OpenAPI JSON and standards-compliant safe YAML,
+The current public alpha supports OpenAPI JSON and standards-compliant safe YAML,
 including anchors and merge keys. Internal and multi-file local `$ref` targets
 are resolved with cycle protection. Remote `$ref` targets are rejected rather
 than fetched implicitly. Advisory mode is the default.
@@ -42,28 +73,28 @@ a private bundle explicitly.
 
 ## Install
 
-Install the current checkout as a managed, editable command:
-
-```bash
-uv tool install --editable .
-jev-oas-sentinel --version
-```
-
-On a Mac or corporate network that relies on certificates from the operating-system trust store, add `--system-certs` to the install command.
-
-After the package is published to PyPI, users can run it once without installing it:
+Run the published CLI once without installing it:
 
 ```bash
 uvx jev-oas-sentinel --version
 ```
 
-Or install it persistently with either supported tool:
+Or install it as an isolated command:
 
 ```bash
 uv tool install jev-oas-sentinel
 # or
 pipx install jev-oas-sentinel
 ```
+
+To work on the current checkout, install it in editable mode:
+
+```bash
+uv tool install --editable .
+jev-oas-sentinel --version
+```
+
+On a Mac or corporate network that relies on certificates from the operating-system trust store, add `--system-certs` to the `uv` install command.
 
 Managed installs can be upgraded or removed cleanly with `uv tool upgrade jev-oas-sentinel` and `uv tool uninstall jev-oas-sentinel`.
 
