@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/jev-oas-sentinel.svg)](https://pypi.org/project/jev-oas-sentinel/)
 [![Python](https://img.shields.io/pypi/pyversions/jev-oas-sentinel.svg)](https://pypi.org/project/jev-oas-sentinel/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-JEV%20OAS%20Sentinel-blue?logo=github)](https://github.com/marketplace/actions/jev-oas-sentinel)
 
 Catch behavioral breaking changes hidden in OpenAPI prose—changes that structural schema diff tools cannot see.
 
