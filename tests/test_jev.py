@@ -1,9 +1,30 @@
 import unittest
+from unittest.mock import Mock, patch
 
-from jev_oas_sentinel.jev import JevClient
+from jev_oas_sentinel.jev import JevClient, _ssl_context
 
 
 class JevClientTest(unittest.TestCase):
+    @patch("jev_oas_sentinel.jev.ssl.create_default_context")
+    def test_explicit_ca_bundle_overrides_native_store(self, create_default_context: Mock) -> None:
+        expected = Mock()
+        create_default_context.return_value = expected
+
+        actual = _ssl_context("/etc/company-ca.pem")
+
+        self.assertIs(expected, actual)
+        create_default_context.assert_called_once_with(cafile="/etc/company-ca.pem")
+
+    @patch("jev_oas_sentinel.jev.truststore")
+    def test_native_store_is_used_when_available(self, native_truststore: Mock) -> None:
+        expected = Mock()
+        native_truststore.SSLContext.return_value = expected
+
+        actual = _ssl_context(None)
+
+        self.assertIs(expected, actual)
+        native_truststore.SSLContext.assert_called_once()
+
     def test_parses_typed_response(self) -> None:
         client = JevClient("not-a-real-key", model="requested")
         decision = client._parse({

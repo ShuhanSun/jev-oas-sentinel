@@ -30,6 +30,11 @@ def parser() -> argparse.ArgumentParser:
     compare.add_argument("--model", default=DEFAULT_MODEL)
     compare.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     compare.add_argument("--api-key-file", type=Path)
+    compare.add_argument(
+        "--ca-bundle",
+        type=Path,
+        help="PEM CA bundle for TLS verification (also JEV_CA_BUNDLE or SSL_CERT_FILE)",
+    )
     compare.add_argument("--review-threshold", type=_probability, default=0.65)
     compare.add_argument("--block-threshold", type=_probability, default=0.90)
     return root
@@ -92,7 +97,8 @@ def _live_client(args: argparse.Namespace, environment: dict[str, str]) -> JevCl
         api_key = environment.get("TYPESAFE_API_KEY", "").strip()
     if not api_key:
         raise ValueError("No TypeSafe API key found; set TYPESAFE_API_KEY, use --api-key-file, or pass --no-jev")
-    return JevClient(api_key, args.endpoint, args.model)
+    ca_bundle = args.ca_bundle or environment.get("JEV_CA_BUNDLE") or environment.get("SSL_CERT_FILE")
+    return JevClient(api_key, args.endpoint, args.model, ca_bundle)
 
 
 def _probability(value: str) -> float:
@@ -100,4 +106,3 @@ def _probability(value: str) -> float:
     if not 0 <= parsed <= 1:
         raise argparse.ArgumentTypeError("must be between 0 and 1")
     return parsed
-

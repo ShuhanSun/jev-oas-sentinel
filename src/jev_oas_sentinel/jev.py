@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+from pathlib import Path
+import ssl
 import sys
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+try:
+    import truststore
+except ImportError:  # Python 3.9 uses OpenSSL's configured CA bundle instead.
+    truststore = None
 
 
 DEFAULT_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
@@ -90,12 +97,19 @@ def questions() -> dict[str, Any]:
 
 
 class JevClient:
-    def __init__(self, api_key: str, endpoint: str = DEFAULT_ENDPOINT, model: str = DEFAULT_MODEL) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        endpoint: str = DEFAULT_ENDPOINT,
+        model: str = DEFAULT_MODEL,
+        ca_bundle: str | Path | None = None,
+    ) -> None:
         if not api_key.strip():
             raise ValueError("API key cannot be blank")
         self.api_key = api_key.strip()
         self.endpoint = endpoint
         self.model = model
+        self.ssl_context = _ssl_context(ca_bundle)
 
     def evaluate(self, state: dict[str, Any]) -> SemanticDecision:
         payload = json.dumps({"state": state, "model": self.model, "questions": questions()}).encode()
@@ -107,7 +121,9 @@ class JevClient:
                 method="POST",
             )
             try:
-                with urlopen(request, timeout=30) as response:  # noqa: S310 - configured API endpoint
+                with urlopen(  # noqa: S310 - configured API endpoint
+                    request, timeout=30, context=self.ssl_context
+                ) as response:
                     return self._parse(json.loads(response.read().decode("utf-8")))
             except HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
@@ -188,3 +204,10 @@ class JevClient:
         normalized = " ".join(body.split())
         return normalized if len(normalized) <= 500 else normalized[:500] + "…"
 
+
+def _ssl_context(ca_bundle: str | Path | None) -> ssl.SSLContext:
+    if ca_bundle:
+        return ssl.create_default_context(cafile=str(ca_bundle))
+    if truststore is not None:
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    return ssl.create_default_context()

@@ -77,6 +77,20 @@ jev-oas-sentinel compare \
 
 The client also accepts `--api-key-file PATH`. Never commit that file.
 
+On Python 3.10 and newer, HTTPS verification uses the operating system's native
+certificate store, including enterprise CAs installed in macOS Keychain or the
+Windows certificate store. For Python 3.9 or a private CA bundle, use
+`--ca-bundle PATH`, `JEV_CA_BUNDLE`, or the standard `SSL_CERT_FILE` environment
+variable. TLS verification is never disabled.
+
+```bash
+jev-oas-sentinel compare \
+  --base examples/base-openapi.yaml \
+  --head examples/head-openapi.yaml \
+  --ca-bundle /path/to/company-ca.pem \
+  --format markdown
+```
+
 Write SARIF for GitHub code scanning:
 
 ```bash

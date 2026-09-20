@@ -1,13 +1,33 @@
 from io import StringIO
+import argparse
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from jev_oas_sentinel.cli import run
+from jev_oas_sentinel.cli import _live_client, run
 
 
 class CliTest(unittest.TestCase):
+    @patch("jev_oas_sentinel.cli.JevClient")
+    def test_ca_bundle_environment_is_forwarded(self, client: unittest.mock.Mock) -> None:
+        args = argparse.Namespace(
+            api_key_file=None,
+            ca_bundle=None,
+            endpoint="https://example.test/jev",
+            model="jev-test",
+        )
+
+        _live_client(
+            args,
+            {"TYPESAFE_API_KEY": "test-key", "JEV_CA_BUNDLE": "/etc/company-ca.pem"},
+        )
+
+        client.assert_called_once_with(
+            "test-key", "https://example.test/jev", "jev-test", "/etc/company-ca.pem"
+        )
+
     def test_offline_comparison(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
