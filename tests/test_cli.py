@@ -136,6 +136,113 @@ class CliTest(unittest.TestCase):
             self.assertEqual(2, exit_code)
             self.assertIn("No TypeSafe API key found", stderr.getvalue())
 
+    def test_configuration_is_applied_and_cli_can_override_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "base.json"
+            head = root / "head.json"
+            config = root / "sentinel.yaml"
+            base.write_text(json.dumps({
+                "openapi": "3.0.3", "paths": {"/x": {"get": {"description": "all"}}},
+            }))
+            head.write_text(json.dumps({
+                "openapi": "3.0.3", "paths": {"/x": {"get": {"description": "active"}}},
+            }))
+            config.write_text("""version: 1
+mode: enforce
+fail_on_review: true
+review_threshold: 0.7
+block_threshold: 0.95
+""")
+            configured_output = StringIO()
+
+            configured_exit = run(
+                [
+                    "compare", "--base", str(base), "--head", str(head),
+                    "--config", str(config), "--dry-run",
+                ],
+                stdout=configured_output, stderr=StringIO(), environment={},
+            )
+            overridden_output = StringIO()
+            overridden_exit = run(
+                [
+                    "compare", "--base", str(base), "--head", str(head),
+                    "--config", str(config), "--dry-run", "--mode", "advisory",
+                    "--no-fail-on-review",
+                ],
+                stdout=overridden_output, stderr=StringIO(), environment={},
+            )
+
+            configured = json.loads(configured_output.getvalue())
+            overridden = json.loads(overridden_output.getvalue())
+            self.assertEqual(1, configured_exit)
+            self.assertEqual("enforce", configured["mode"])
+            self.assertEqual(str(config.resolve()), configured["metrics"]["config_file"])
+            self.assertEqual(0, overridden_exit)
+            self.assertEqual("advisory", overridden["mode"])
+
+    def test_configuration_suppresses_finding_with_audit_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "base.json"
+            head = root / "head.json"
+            config = root / "sentinel.yaml"
+            base.write_text(json.dumps({
+                "openapi": "3.0.3", "paths": {"/orders": {"get": {"responses": {}}}},
+            }))
+            head.write_text(json.dumps({"openapi": "3.0.3", "paths": {}}))
+            config.write_text("""version: 1
+suppressions:
+  - operation: GET /orders
+    rule: operation-removed
+    expires: 2099-12-31
+    owner: orders-team
+    reason: tracked in API-123
+""")
+            output = StringIO()
+
+            exit_code = run(
+                [
+                    "compare", "--base", str(base), "--head", str(head),
+                    "--config", str(config), "--no-jev",
+                ],
+                stdout=output, stderr=StringIO(), environment={},
+            )
+
+            report = json.loads(output.getvalue())
+            self.assertEqual(0, exit_code)
+            self.assertEqual(0, report["summary"]["blocks"])
+            self.assertEqual(1, report["summary"]["notices"])
+            self.assertEqual(1, report["metrics"]["suppressed_findings"])
+            self.assertEqual(
+                "orders-team", report["findings"][0]["evidence"]["suppression"]["owner"]
+            )
+
+    def test_expired_suppression_fails_before_openapi_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "sentinel.yaml"
+            config.write_text("""version: 1
+suppressions:
+  - operation: GET /orders
+    rule: operation-removed
+    expires: 2000-01-01
+    owner: orders-team
+    reason: obsolete exception
+""")
+            stderr = StringIO()
+
+            exit_code = run(
+                [
+                    "compare", "--base", "missing-base.yaml", "--head", "missing-head.yaml",
+                    "--config", str(config), "--no-jev",
+                ],
+                stdout=StringIO(), stderr=stderr, environment={},
+            )
+
+            self.assertEqual(2, exit_code)
+            self.assertIn("Expired suppression", stderr.getvalue())
+            self.assertNotIn("Cannot read", stderr.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

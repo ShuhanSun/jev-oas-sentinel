@@ -1,0 +1,16 @@
+version: 1
+mode: advisory
+fail_on_review: false
+model: jev-1.13.0
+review_threshold: 0.65
+block_threshold: 0.90
+max_jev_calls: 20
+timeout: 30
+max_retries: 3
+
+suppressions:
+  - operation: GET /legacy/*
+    rule: semantic-contract-review
+    expires: 2099-12-31
+    owner: api-platform
+    reason: Migration is tracked in API-123

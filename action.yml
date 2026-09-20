@@ -9,6 +9,13 @@ inputs:
   head:
     description: Candidate OpenAPI document
     required: true
+  config:
+    description: Configuration file; omit to discover .jev-sentinel.yaml
+    required: false
+  no-config:
+    description: Disable configuration discovery
+    required: false
+    default: "false"
   ref-root:
     description: Allowed root directory for local $ref files
     required: false
@@ -26,7 +33,6 @@ inputs:
   mode:
     description: advisory or enforce
     required: false
-    default: advisory
   format:
     description: json, markdown, or sarif
     required: false
@@ -38,19 +44,15 @@ inputs:
   fail-on-review:
     description: Fail the action when review findings exist
     required: false
-    default: "false"
   max-jev-calls:
-    description: Maximum number of JEV calls allowed in one run
+    description: Maximum number of JEV calls allowed; defaults to 20 when no config is used
     required: false
-    default: "20"
   timeout:
     description: Timeout in seconds for each JEV HTTP attempt
     required: false
-    default: "30"
   max-retries:
     description: Maximum retries after retryable JEV responses
     required: false
-    default: "3"
 
 runs:
   using: composite
@@ -71,6 +73,8 @@ runs:
         TYPESAFE_API_KEY: ${{ inputs.api-key }}
         SENTINEL_BASE: ${{ inputs.base }}
         SENTINEL_HEAD: ${{ inputs.head }}
+        SENTINEL_CONFIG: ${{ inputs.config }}
+        SENTINEL_NO_CONFIG: ${{ inputs.no-config }}
         SENTINEL_REF_ROOT: ${{ inputs.ref-root }}
         SENTINEL_NO_JEV: ${{ inputs.no-jev }}
         SENTINEL_DRY_RUN: ${{ inputs.dry-run }}
@@ -82,9 +86,21 @@ runs:
         SENTINEL_TIMEOUT: ${{ inputs.timeout }}
         SENTINEL_MAX_RETRIES: ${{ inputs.max-retries }}
       run: |
-        args=(compare --base "$SENTINEL_BASE" --head "$SENTINEL_HEAD" --mode "$SENTINEL_MODE" --format "$SENTINEL_FORMAT" --output "$SENTINEL_OUTPUT" --max-jev-calls "$SENTINEL_MAX_JEV_CALLS" --timeout "$SENTINEL_TIMEOUT" --max-retries "$SENTINEL_MAX_RETRIES")
+        args=(compare --base "$SENTINEL_BASE" --head "$SENTINEL_HEAD" --format "$SENTINEL_FORMAT" --output "$SENTINEL_OUTPUT")
+        has_config=false
+        if [[ -n "$SENTINEL_CONFIG" ]]; then
+          args+=(--config "$SENTINEL_CONFIG")
+          has_config=true
+        elif [[ "$SENTINEL_NO_CONFIG" == "true" ]]; then
+          args+=(--no-config)
+        elif [[ -f .jev-sentinel.yaml ]]; then
+          has_config=true
+        fi
         if [[ -n "$SENTINEL_REF_ROOT" ]]; then
           args+=(--ref-root "$SENTINEL_REF_ROOT")
+        fi
+        if [[ -n "$SENTINEL_MODE" ]]; then
+          args+=(--mode "$SENTINEL_MODE")
         fi
         if [[ "$SENTINEL_NO_JEV" == "true" ]]; then
           args+=(--no-jev)
@@ -94,6 +110,19 @@ runs:
         fi
         if [[ "$SENTINEL_FAIL_ON_REVIEW" == "true" ]]; then
           args+=(--fail-on-review)
+        elif [[ "$SENTINEL_FAIL_ON_REVIEW" == "false" ]]; then
+          args+=(--no-fail-on-review)
+        fi
+        if [[ -n "$SENTINEL_MAX_JEV_CALLS" ]]; then
+          args+=(--max-jev-calls "$SENTINEL_MAX_JEV_CALLS")
+        elif [[ "$has_config" == "false" ]]; then
+          args+=(--max-jev-calls 20)
+        fi
+        if [[ -n "$SENTINEL_TIMEOUT" ]]; then
+          args+=(--timeout "$SENTINEL_TIMEOUT")
+        fi
+        if [[ -n "$SENTINEL_MAX_RETRIES" ]]; then
+          args+=(--max-retries "$SENTINEL_MAX_RETRIES")
         fi
         uv run --project "$GITHUB_ACTION_PATH" --locked python -m jev_oas_sentinel "${args[@]}"
 

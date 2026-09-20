@@ -10,6 +10,7 @@ import time
 from typing import Any, Callable, Sequence, TextIO
 
 from . import __version__
+from .config import SentinelConfig, apply_suppressions, discover_config, validate_suppressions
 from .jev import DEFAULT_ENDPOINT, DEFAULT_MODEL, JevClient, JevTransportMetrics
 from .openapi import OpenApiDiffer, load_spec
 from .policy import PolicyEngine
@@ -21,6 +22,17 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = root.add_subparsers(dest="command", required=True)
     compare = commands.add_parser("compare", help="Compare two OpenAPI documents")
+    configuration = compare.add_mutually_exclusive_group()
+    configuration.add_argument(
+        "--config",
+        type=Path,
+        help="Configuration file (default: .jev-sentinel.yaml in the current directory)",
+    )
+    configuration.add_argument(
+        "--no-config",
+        action="store_true",
+        help="Do not discover or load a configuration file",
+    )
     compare.add_argument("--base", type=Path, required=True, help="Baseline OpenAPI document")
     compare.add_argument("--head", type=Path, required=True, help="Candidate OpenAPI document")
     compare.add_argument(
@@ -30,7 +42,7 @@ def parser() -> argparse.ArgumentParser:
     )
     compare.add_argument("--format", choices=("json", "markdown", "sarif"), default="json")
     compare.add_argument("--output", type=Path, help="Write output to a file")
-    compare.add_argument("--mode", choices=("advisory", "enforce"), default="advisory")
+    compare.add_argument("--mode", choices=("advisory", "enforce"))
     execution = compare.add_mutually_exclusive_group()
     execution.add_argument("--no-jev", action="store_true", help="Run deterministic checks only")
     execution.add_argument(
@@ -38,8 +50,21 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show which operations need JEV without making API requests",
     )
-    compare.add_argument("--fail-on-review", action="store_true", help="Exit 1 when review findings exist")
-    compare.add_argument("--model", default=DEFAULT_MODEL)
+    review_exit = compare.add_mutually_exclusive_group()
+    review_exit.add_argument(
+        "--fail-on-review",
+        dest="fail_on_review",
+        action="store_true",
+        default=None,
+        help="Exit 1 when review findings exist",
+    )
+    review_exit.add_argument(
+        "--no-fail-on-review",
+        dest="fail_on_review",
+        action="store_false",
+        help="Do not exit 1 for review findings",
+    )
+    compare.add_argument("--model")
     compare.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     compare.add_argument("--api-key-file", type=Path)
     compare.add_argument(
@@ -67,19 +92,17 @@ def parser() -> argparse.ArgumentParser:
     compare.add_argument(
         "--timeout",
         type=_positive_number,
-        default=30.0,
         metavar="SECONDS",
         help="Timeout for each JEV HTTP attempt (default: 30)",
     )
     compare.add_argument(
         "--max-retries",
         type=_nonnegative_integer,
-        default=3,
         metavar="N",
         help="Maximum retries after retryable JEV responses (default: 3)",
     )
-    compare.add_argument("--review-threshold", type=_probability, default=0.65)
-    compare.add_argument("--block-threshold", type=_probability, default=0.90)
+    compare.add_argument("--review-threshold", type=_probability)
+    compare.add_argument("--block-threshold", type=_probability)
     return root
 
 
@@ -92,6 +115,9 @@ def run(
 ) -> int:
     try:
         args = parser().parse_args(argv)
+        config = discover_config(args.config, args.no_config)
+        _apply_config(args, config)
+        validate_suppressions(config.suppressions)
         if args.review_threshold > args.block_threshold:
             raise ValueError("Thresholds must satisfy 0 <= review <= block <= 1")
         if args.output and args.jev_io_output and args.output.resolve() == args.jev_io_output.resolve():
@@ -124,13 +150,19 @@ def run(
             differ, client, args.mode, args.review_threshold, args.block_threshold, str(args.head),
             "dry-run" if args.dry_run else "disabled",
         ).evaluate(changes)
+        findings, suppressed_findings = apply_suppressions(
+            evaluation.findings, config.suppressions
+        )
         elapsed_ms = int((time.monotonic() - started) * 1000)
         transport = client.transport_metrics if client is not None else JevTransportMetrics()
         report = Report(
             __version__, datetime.now(timezone.utc), str(args.base), str(args.head), args.mode,
             "disabled" if args.no_jev else "dry-run" if args.dry_run else args.model,
-            evaluation.findings,
+            findings,
             {
+                "config_file": str(config.path) if config.path else None,
+                "configured_suppressions": len(config.suppressions),
+                "suppressed_findings": suppressed_findings,
                 "changed_operations": len(changes),
                 "planned_semantic_calls": planned_calls,
                 "semantic_attempts": evaluation.attempts,
@@ -164,6 +196,23 @@ def run(
 
 def main(argv: Sequence[str] | None = None) -> int:
     return run(argv)
+
+
+def _apply_config(args: argparse.Namespace, config: SentinelConfig) -> None:
+    args.mode = _first_defined(args.mode, config.mode, "advisory")
+    args.fail_on_review = _first_defined(args.fail_on_review, config.fail_on_review, False)
+    args.model = _first_defined(args.model, config.model, DEFAULT_MODEL)
+    args.review_threshold = _first_defined(
+        args.review_threshold, config.review_threshold, 0.65
+    )
+    args.block_threshold = _first_defined(args.block_threshold, config.block_threshold, 0.90)
+    args.max_jev_calls = _first_defined(args.max_jev_calls, config.max_jev_calls, None)
+    args.timeout = _first_defined(args.timeout, config.timeout, 30.0)
+    args.max_retries = _first_defined(args.max_retries, config.max_retries, 3)
+
+
+def _first_defined(*values: Any) -> Any:
+    return next((value for value in values if value is not None), None)
 
 
 def _live_client(

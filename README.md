@@ -108,6 +108,43 @@ Bound API usage and transport behavior explicitly in CI:
 --max-jev-calls 20 --timeout 30 --max-retries 3
 ```
 
+## Project configuration
+
+Put shared policy in `.jev-sentinel.yaml` at the directory where the command
+runs. The format is versioned, CLI options override file settings, and
+`--config PATH` selects another file. Use `--no-config` for a fully explicit
+run.
+
+```yaml
+version: 1
+mode: advisory
+fail_on_review: false
+model: jev-1.13.0
+review_threshold: 0.65
+block_threshold: 0.90
+max_jev_calls: 20
+timeout: 30
+max_retries: 3
+
+suppressions:
+  - operation: GET /legacy/*
+    rule: semantic-contract-review
+    expires: 2099-12-31
+    owner: api-platform
+    reason: Migration is tracked in API-123
+```
+
+Suppressions require an owner, reason, and expiration date. A matching block or
+review becomes a notice but remains in JSON, Markdown, and SARIF with its
+original severity and suppression metadata. An expired suppression fails the
+run so exceptions cannot silently become permanent. Operation and rule values
+support shell-style `*`, `?`, and character-set patterns.
+
+For security, repository configuration cannot set the JEV endpoint, API-key
+file, CA bundle, local-reference root, report path, or trace path. Those remain
+explicit CLI options. See [`examples/jev-sentinel.yaml`](examples/jev-sentinel.yaml)
+for a complete example.
+
 The client also accepts `--api-key-file PATH`. Never commit that file.
 
 To inspect the exact JEV input and output, opt in to a sanitized trace:
@@ -163,7 +200,7 @@ jev-oas-sentinel compare \
 The repository includes a composite action. A complete pull-request example is available at [`examples/github-workflow.yaml`](examples/github-workflow.yaml).
 
 ```yaml
-- uses: ShuhanSun/jev-oas-sentinel@v0.5.0
+- uses: ShuhanSun/jev-oas-sentinel@v0.6.0
   with:
     base: /tmp/openapi-base.yaml
     head: src/main/resources/openapi.yaml
