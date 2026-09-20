@@ -27,7 +27,9 @@ class Finding:
 @dataclass(frozen=True)
 class Evaluation:
     findings: tuple[Finding, ...]
+    attempts: int
     calls: int
+    failures: int
     input_tokens: int
     output_tokens: int
 
@@ -53,7 +55,7 @@ class PolicyEngine:
 
     def evaluate(self, changes: list[OperationChange]) -> Evaluation:
         findings: list[Finding] = []
-        calls = input_tokens = output_tokens = 0
+        attempts = calls = failures = input_tokens = output_tokens = 0
         for change in changes:
             findings.extend(Finding(
                 issue.rule_id, issue.severity, issue.operation, issue.message,
@@ -69,19 +71,21 @@ class PolicyEngine:
                 ))
                 continue
             try:
+                attempts += 1
                 decision = self.client.evaluate(self.differ.semantic_state(change))
                 calls += 1
                 input_tokens += decision.input_tokens
                 output_tokens += decision.output_tokens
                 findings.append(self._finding(change, decision))
             except OSError as exc:
+                failures += 1
                 severity = "block" if self.mode == "enforce" else "review"
                 findings.append(Finding(
                     "semantic-evaluation-failed", severity, change.operation,
                     f"JEV evaluation failed: {self._safe_message(exc)}",
                     self.source, {"layer": "semantic", "failure_mode": "closed"},
                 ))
-        return Evaluation(tuple(findings), calls, input_tokens, output_tokens)
+        return Evaluation(tuple(findings), attempts, calls, failures, input_tokens, output_tokens)
 
     def _finding(self, change: OperationChange, decision: SemanticDecision) -> Finding:
         violation_probability = 1.0 - decision.old_promise_preserved_probability
@@ -127,4 +131,3 @@ class PolicyEngine:
     def _safe_message(exc: OSError) -> str:
         normalized = " ".join(str(exc).split()) or type(exc).__name__
         return normalized if len(normalized) <= 300 else normalized[:300] + "…"
-

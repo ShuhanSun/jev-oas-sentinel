@@ -1,11 +1,55 @@
 import json
+from io import BytesIO
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+from urllib.error import HTTPError
 
 from jev_oas_sentinel.jev import JevClient, _ssl_context
 
 
 class JevClientTest(unittest.TestCase):
+    @patch("jev_oas_sentinel.jev.time.sleep")
+    @patch("jev_oas_sentinel.jev.urlopen")
+    def test_retry_metrics_include_failed_http_attempt(self, urlopen: Mock, sleep: Mock) -> None:
+        failed = HTTPError(
+            "https://example.test/jev", 500, "server error",
+            {"Retry-After": "0"}, BytesIO(b'{"error":"temporary"}'),
+        )
+        response = Mock()
+        response.status = 200
+        response.read.return_value = json.dumps({
+            "model": "resolved-model",
+            "answers": {
+                "change_kind": {
+                    "type": "choice", "choice": "docs_only", "confidence": 1.0,
+                    "probabilities": {"docs_only": 1.0},
+                },
+                "affected_dimension": {
+                    "type": "choice", "choice": "none", "confidence": 1.0,
+                    "probabilities": {"none": 1.0},
+                },
+                "old_promise_preserved": {"type": "noul", "noul": 1.0},
+                "migration_burden": {
+                    "type": "score", "score": 0, "confidence": 1.0,
+                    "probabilities": {"0": 1.0},
+                },
+            },
+        }).encode()
+        success = MagicMock()
+        success.__enter__.return_value = response
+        urlopen.side_effect = [failed, success]
+        events: list[dict[str, object]] = []
+        client = JevClient("top-secret-key", trace=events.append)
+
+        client.evaluate({"operation": "GET /orders"})
+
+        self.assertEqual(2, client.transport_metrics.attempts)
+        self.assertEqual(1, client.transport_metrics.successes)
+        self.assertEqual(1, client.transport_metrics.failures)
+        self.assertEqual(1, client.transport_metrics.retries)
+        self.assertTrue(events[0]["will_retry"])
+        sleep.assert_called_once_with(0.0)
+
     @patch("jev_oas_sentinel.jev.urlopen")
     def test_trace_records_io_without_api_key(self, urlopen: Mock) -> None:
         response = Mock()
@@ -39,6 +83,9 @@ class JevClientTest(unittest.TestCase):
         self.assertEqual("GET /orders", events[0]["request"]["state"]["operation"])
         self.assertEqual("resolved-model", events[0]["response"]["model"])
         self.assertNotIn("top-secret-key", json.dumps(events))
+        self.assertEqual(1, client.transport_metrics.attempts)
+        self.assertEqual(1, client.transport_metrics.successes)
+        self.assertEqual(0, client.transport_metrics.failures)
 
     @patch("jev_oas_sentinel.jev.ssl.create_default_context")
     def test_explicit_ca_bundle_overrides_native_store(self, create_default_context: Mock) -> None:

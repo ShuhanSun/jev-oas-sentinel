@@ -33,6 +33,9 @@ class PolicyEngineTest(unittest.TestCase):
     def test_advisory_never_blocks_semantic_change(self) -> None:
         result = PolicyEngine(OpenApiDiffer(), StubClient(decision(.99, .01)), "advisory", .65, .9, "head.yaml").evaluate([self.change])
         self.assertEqual("review", result.findings[0].severity)
+        self.assertEqual(1, result.attempts)
+        self.assertEqual(1, result.calls)
+        self.assertEqual(0, result.failures)
 
     def test_enforce_requires_both_signals(self) -> None:
         result = PolicyEngine(OpenApiDiffer(), StubClient(decision(.95, .03)), "enforce", .65, .9, "head.yaml").evaluate([self.change])
@@ -47,6 +50,9 @@ class PolicyEngineTest(unittest.TestCase):
         enforce = PolicyEngine(OpenApiDiffer(), FailingClient(), "enforce", .65, .9, "head.yaml").evaluate([self.change])
         self.assertEqual("review", advisory.findings[0].severity)
         self.assertEqual("block", enforce.findings[0].severity)
+        self.assertEqual(1, advisory.attempts)
+        self.assertEqual(0, advisory.calls)
+        self.assertEqual(1, advisory.failures)
 
 
 if __name__ == "__main__":

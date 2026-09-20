@@ -10,7 +10,7 @@ import time
 from typing import Any, Callable, Sequence, TextIO
 
 from . import __version__
-from .jev import DEFAULT_ENDPOINT, DEFAULT_MODEL, JevClient
+from .jev import DEFAULT_ENDPOINT, DEFAULT_MODEL, JevClient, JevTransportMetrics
 from .openapi import OpenApiDiffer, load_spec
 from .policy import PolicyEngine
 from .report import Report, render
@@ -82,13 +82,22 @@ def run(
             differ, client, args.mode, args.review_threshold, args.block_threshold, str(args.head)
         ).evaluate(changes)
         elapsed_ms = int((time.monotonic() - started) * 1000)
+        transport = client.transport_metrics if client is not None else JevTransportMetrics()
         report = Report(
             __version__, datetime.now(timezone.utc), str(args.base), str(args.head), args.mode,
             "disabled" if args.no_jev else args.model,
             evaluation.findings,
             {
                 "changed_operations": len(changes),
+                "semantic_attempts": evaluation.attempts,
                 "semantic_calls": evaluation.calls,
+                "semantic_successes": evaluation.calls,
+                "semantic_failures": evaluation.failures,
+                "jev_http_attempts": transport.attempts,
+                "jev_http_successes": transport.successes,
+                "jev_http_failures": transport.failures,
+                "jev_http_retries": transport.retries,
+                "jev_http_latency_ms": transport.latency_ms,
                 "input_tokens": evaluation.input_tokens,
                 "output_tokens": evaluation.output_tokens,
                 "elapsed_ms": elapsed_ms,
@@ -133,13 +142,19 @@ def _write_jev_io(
     events: list[dict[str, object]],
     stderr: TextIO,
 ) -> None:
-    rendered = json.dumps({"events": events}, indent=2, ensure_ascii=False) + "\n"
+    rendered = json.dumps(
+        {"schema_version": 1, "events": events}, indent=2, ensure_ascii=False
+    ) + "\n"
     if args.show_jev_io:
         print("JEV request/response trace:", file=stderr)
         stderr.write(rendered)
     if args.jev_io_output:
         args.jev_io_output.parent.mkdir(parents=True, exist_ok=True)
-        args.jev_io_output.write_text(rendered, encoding="utf-8")
+        descriptor = os.open(args.jev_io_output, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write(rendered)
+        if os.name != "nt":
+            os.chmod(args.jev_io_output, 0o600)
         print(f"Wrote JEV request/response trace to {args.jev_io_output}", file=stderr)
 
 

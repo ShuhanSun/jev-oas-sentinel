@@ -41,6 +41,11 @@ runs:
       with:
         python-version: "3.13"
 
+    - name: Set up uv
+      uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      with:
+        enable-cache: true
+
     - name: Compare OpenAPI contracts
       shell: bash
       env:
@@ -60,7 +65,7 @@ runs:
         if [[ "$SENTINEL_FAIL_ON_REVIEW" == "true" ]]; then
           args+=(--fail-on-review)
         fi
-        PYTHONPATH="$GITHUB_ACTION_PATH/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m jev_oas_sentinel "${args[@]}"
+        uv run --project "$GITHUB_ACTION_PATH" --locked python -m jev_oas_sentinel "${args[@]}"
 
 branding:
   icon: shield

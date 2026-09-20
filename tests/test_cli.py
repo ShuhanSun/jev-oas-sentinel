@@ -1,6 +1,7 @@
 import argparse
 from io import StringIO
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -44,7 +45,9 @@ class CliTest(unittest.TestCase):
             )
 
             self.assertEqual(0, exit_code)
-            self.assertEqual({"events": []}, json.loads(trace.read_text()))
+            self.assertEqual({"schema_version": 1, "events": []}, json.loads(trace.read_text()))
+            if os.name != "nt":
+                self.assertEqual(0o600, trace.stat().st_mode & 0o777)
 
     def test_offline_comparison(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -64,6 +67,10 @@ class CliTest(unittest.TestCase):
             self.assertEqual(0, exit_code)
             self.assertEqual(1, report["summary"]["reviews"])
             self.assertEqual("semantic-evaluation-skipped", report["findings"][0]["rule_id"])
+            self.assertEqual(0, report["metrics"]["semantic_attempts"])
+            self.assertEqual(0, report["metrics"]["semantic_successes"])
+            self.assertEqual(0, report["metrics"]["semantic_failures"])
+            self.assertEqual(0, report["metrics"]["jev_http_attempts"])
 
     def test_missing_api_key_is_usage_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

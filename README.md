@@ -21,7 +21,10 @@ Local `$ref` and remote `$ref` targets are not dereferenced in this release. A c
 - Python 3.9+ when running without `uv`
 - A TypeSafe API key for live semantic evaluation
 
-The CLI has no third-party runtime dependencies. Tool installers keep it isolated from system and project Python environments.
+The only runtime dependency on Python 3.10+ is `truststore`, which securely uses
+the operating system's native certificate store. Tool installers keep the CLI
+isolated from system and project Python environments. Python 3.9 uses its
+configured OpenSSL CA bundle and can be given a private bundle explicitly.
 
 ## Install
 
@@ -95,9 +98,10 @@ jev-oas-sentinel compare \
   --format markdown
 ```
 
-The trace never includes the `Authorization` header or API key. It does include
-the contract fragments sent to JEV, so treat trace files as potentially
-sensitive and do not publish them unintentionally.
+The versioned trace never includes the `Authorization` header or API key. Trace
+files are created with owner-only permissions on POSIX systems. They do include
+the contract fragments sent to JEV, so treat them as potentially sensitive and
+do not publish them unintentionally.
 
 On Python 3.10 and newer, HTTPS verification uses the operating system's native
 certificate store, including enterprise CAs installed in macOS Keychain or the
@@ -128,7 +132,7 @@ jev-oas-sentinel compare \
 The repository includes a composite action. A complete pull-request example is available at [`examples/github-workflow.yaml`](examples/github-workflow.yaml).
 
 ```yaml
-- uses: ShuhanSun/jev-oas-sentinel@v0.3.0
+- uses: ShuhanSun/jev-oas-sentinel@v0.3.1
   with:
     base: /tmp/openapi-base.yaml
     head: src/main/resources/openapi.yaml

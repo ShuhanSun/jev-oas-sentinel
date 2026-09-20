@@ -41,6 +41,15 @@ class SemanticDecision:
         return self.change_kind_probabilities.get("breaking", 0.0)
 
 
+@dataclass
+class JevTransportMetrics:
+    attempts: int = 0
+    successes: int = 0
+    failures: int = 0
+    retries: int = 0
+    latency_ms: int = 0
+
+
 def questions() -> dict[str, Any]:
     return {
         "change_kind": {
@@ -112,6 +121,7 @@ class JevClient:
         self.model = model
         self.ssl_context = _ssl_context(ca_bundle)
         self.trace = trace
+        self.transport_metrics = JevTransportMetrics()
 
     def evaluate(self, state: dict[str, Any]) -> SemanticDecision:
         request_body = {"state": state, "model": self.model, "questions": questions()}
@@ -132,20 +142,24 @@ class JevClient:
                     try:
                         response_body = json.loads(body)
                     except json.JSONDecodeError as exc:
+                        duration_ms = self._finish_attempt(started, succeeded=False)
                         self._record_trace(
-                            request_body, attempt, started, getattr(response, "status", 200),
+                            request_body, attempt, duration_ms, getattr(response, "status", 200),
                             body, f"Invalid JSON response: {exc.msg}",
                         )
                         raise
+                    duration_ms = self._finish_attempt(started, succeeded=True)
                     self._record_trace(
-                        request_body, attempt, started, getattr(response, "status", 200), response_body
+                        request_body, attempt, duration_ms,
+                        getattr(response, "status", 200), response_body,
                     )
                     return self._parse(response_body)
             except HTTPError as exc:
                 body = exc.read().decode("utf-8", errors="replace")
                 will_retry = attempt < 4 and (exc.code in {429, 529} or exc.code >= 500)
+                duration_ms = self._finish_attempt(started, succeeded=False, retried=will_retry)
                 self._record_trace(
-                    request_body, attempt, started, exc.code, _json_or_text(body),
+                    request_body, attempt, duration_ms, exc.code, _json_or_text(body),
                     f"HTTP {exc.code}", will_retry,
                 )
                 if will_retry:
@@ -155,7 +169,8 @@ class JevClient:
                     continue
                 raise OSError(f"JEV request failed with HTTP {exc.code}: {self._safe_body(body)}") from exc
             except (URLError, TimeoutError) as exc:
-                self._record_trace(request_body, attempt, started, error=str(exc))
+                duration_ms = self._finish_attempt(started, succeeded=False)
+                self._record_trace(request_body, attempt, duration_ms, error=str(exc))
                 raise OSError(f"JEV request failed: {exc}") from exc
             except json.JSONDecodeError as exc:
                 raise OSError(f"JEV request failed: {exc}") from exc
@@ -165,7 +180,7 @@ class JevClient:
         self,
         request_body: dict[str, Any],
         attempt: int,
-        started: float,
+        duration_ms: int,
         status: int | None = None,
         response: Any = None,
         error: str | None = None,
@@ -176,7 +191,7 @@ class JevClient:
         event: dict[str, Any] = {
             "endpoint": self.endpoint,
             "attempt": attempt,
-            "duration_ms": int((time.monotonic() - started) * 1000),
+            "duration_ms": duration_ms,
             "request": request_body,
         }
         if status is not None:
@@ -188,6 +203,18 @@ class JevClient:
         if will_retry:
             event["will_retry"] = True
         self.trace(event)
+
+    def _finish_attempt(self, started: float, *, succeeded: bool, retried: bool = False) -> int:
+        duration_ms = int((time.monotonic() - started) * 1000)
+        self.transport_metrics.attempts += 1
+        self.transport_metrics.latency_ms += duration_ms
+        if succeeded:
+            self.transport_metrics.successes += 1
+        else:
+            self.transport_metrics.failures += 1
+        if retried:
+            self.transport_metrics.retries += 1
+        return duration_ms
 
     def _parse(self, root: Any) -> SemanticDecision:
         try:
